@@ -731,6 +731,13 @@ static void acceptCommonHandler(int fd, int flags, char *ip) {
     c->flags |= flags;
 }
 
+/**
+ * 响应连接的处理器
+ * @param el
+ * @param fd
+ * @param privdata
+ * @param mask
+ */
 void acceptTcpHandler(aeEventLoop *el, int fd, void *privdata, int mask) {
     int cport, cfd, max = MAX_ACCEPTS_PER_CALL;
     char cip[NET_IP_STR_LEN];
@@ -1069,6 +1076,13 @@ int writeToClient(int fd, client *c, int handler_installed) {
 }
 
 /* Write event handler. Just send data to the client. */
+/**
+ * 返回处理结果的处理器
+ * @param el
+ * @param fd
+ * @param privdata
+ * @param mask
+ */
 void sendReplyToClient(aeEventLoop *el, int fd, void *privdata, int mask) {
     UNUSED(el);
     UNUSED(mask);
@@ -1511,6 +1525,13 @@ void processInputBufferAndReplicate(client *c) {
     }
 }
 
+/**
+ * 读取客户端命令的处理器
+ * @param el
+ * @param fd
+ * @param privdata
+ * @param mask
+ */
 void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
     client *c = (client*) privdata;
     int nread, readlen;

@@ -133,6 +133,15 @@ void aeStop(aeEventLoop *eventLoop) {
     eventLoop->stop = 1;
 }
 
+/**
+ * 创建一个文件事件
+ * @param eventLoop 事件循环，一个服务器只有一个
+ * @param fd 表示客户端连接的文件描述符，每个客户端连接对应一个
+ * @param mask 事件，比如AE_READABLE可读事件
+ * @param proc 事件关联的处理器
+ * @param clientData 表示客户端在redis中指向的变量
+ * @return
+ */
 int aeCreateFileEvent(aeEventLoop *eventLoop, int fd, int mask,
         aeFileProc *proc, void *clientData)
 {
@@ -407,14 +416,20 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
         }
 
         /* Call the multiplexing API, will return only on timeout or when
-         * some event fires. */
+         * some event fires.
+         * 调用IO多路复用函数：select、epoll、evport、kqueue中的一种。
+         * 阻塞等待事件变成就绪状态或者超时，如果有事件就绪就将对应的事件加入到EventLoop
+         * 的待处理事件队列eventLoop->fired中，然后进入下一个循环
+         * */
         numevents = aeApiPoll(eventLoop, tvp);
 
         /* After sleep callback. */
         if (eventLoop->aftersleep != NULL && flags & AE_CALL_AFTER_SLEEP)
             eventLoop->aftersleep(eventLoop);
 
+        // 有numevents个事件被触发，将就绪队列中的事件挨个进行处理
         for (j = 0; j < numevents; j++) {
+            // 文件事件，file event
             aeFileEvent *fe = &eventLoop->events[eventLoop->fired[j].fd];
             int mask = eventLoop->fired[j].mask;
             int fd = eventLoop->fired[j].fd;
@@ -440,6 +455,7 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
              * Fire the readable event if the call sequence is not
              * inverted. */
             if (!invert && fe->mask & mask & AE_READABLE) {
+                // 处理读事件
                 fe->rfileProc(eventLoop,fd,fe->clientData,mask);
                 fired++;
             }
@@ -447,6 +463,7 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
             /* Fire the writable event. */
             if (fe->mask & mask & AE_WRITABLE) {
                 if (!fired || fe->wfileProc != fe->rfileProc) {
+                    // 处理写事件
                     fe->wfileProc(eventLoop,fd,fe->clientData,mask);
                     fired++;
                 }
@@ -466,6 +483,7 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
     }
     /* Check time events */
     if (flags & AE_TIME_EVENTS)
+        // 处理时间时间
         processed += processTimeEvents(eventLoop);
 
     return processed; /* return the number of processed file/time events */
@@ -498,6 +516,7 @@ void aeMain(aeEventLoop *eventLoop) {
     while (!eventLoop->stop) {
         if (eventLoop->beforesleep != NULL)
             eventLoop->beforesleep(eventLoop);
+        // 事件处理
         aeProcessEvents(eventLoop, AE_ALL_EVENTS|AE_CALL_AFTER_SLEEP);
     }
 }
