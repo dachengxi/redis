@@ -83,7 +83,13 @@ void linkClient(client *c) {
     raxInsert(server.clients_index,(unsigned char*)&id,sizeof(id),c,NULL);
 }
 
+/**
+ * 根据文件描述符创建客户端实例
+ * @param fd
+ * @return
+ */
 client *createClient(int fd) {
+    // 申请client大小的内存空间
     client *c = zmalloc(sizeof(client));
 
     /* passing -1 as fd it is possible to create a non connected client.
@@ -91,10 +97,15 @@ client *createClient(int fd) {
      * in the context of a client. When commands are executed in other
      * contexts (for instance a Lua script) we need a non connected client. */
     if (fd != -1) {
+        // 非阻塞IO
         anetNonBlock(NULL,fd);
         anetEnableTcpNoDelay(NULL,fd);
         if (server.tcpkeepalive)
             anetKeepAlive(NULL,fd,server.tcpkeepalive);
+        /**
+         * 为这次连接创建一个文件事件，监听可读事件
+         * 回调函数：readQueryFromClient，用来接收客户端输入命令
+         */
         if (aeCreateFileEvent(server.el,fd,AE_READABLE,
             readQueryFromClient, c) == AE_ERR)
         {
@@ -661,8 +672,15 @@ int clientHasPendingReplies(client *c) {
 }
 
 #define MAX_ACCEPTS_PER_CALL 1000
+/**
+ * 根据客户端文件描述符创建客户端实例
+ * @param fd
+ * @param flags
+ * @param ip
+ */
 static void acceptCommonHandler(int fd, int flags, char *ip) {
     client *c;
+    // 根据客户端描述符创建客户端实例
     if ((c = createClient(fd)) == NULL) {
         serverLog(LL_WARNING,
             "Error registering fd event for the new client: %s (fd=%d)",
@@ -732,7 +750,9 @@ static void acceptCommonHandler(int fd, int flags, char *ip) {
 }
 
 /**
- * 响应连接的处理器
+ * 接收客户端连接请求的处理器
+ * 每当接收到一个客户端请求的时候，服务器就会根据客户端文件描述符创建一个
+ * 客户端实例
  * @param el
  * @param fd
  * @param privdata
@@ -746,6 +766,7 @@ void acceptTcpHandler(aeEventLoop *el, int fd, void *privdata, int mask) {
     UNUSED(privdata);
 
     while(max--) {
+        // 调用accept接收客户端连接请求，返回与客户端关联的文件描述符
         cfd = anetTcpAccept(server.neterr, fd, cip, sizeof(cip), &cport);
         if (cfd == ANET_ERR) {
             if (errno != EWOULDBLOCK)
@@ -754,6 +775,7 @@ void acceptTcpHandler(aeEventLoop *el, int fd, void *privdata, int mask) {
             return;
         }
         serverLog(LL_VERBOSE,"Accepted %s:%d", cip, cport);
+        // 根据文件描述符创建客户端实例，用于和客户端交互
         acceptCommonHandler(cfd,0,cip);
     }
 }
@@ -1430,7 +1452,9 @@ int processMultibulkBuffer(client *c) {
 /* This function is called every time, in the client structure 'c', there is
  * more query buffer to process, because we read more data from the socket
  * or because a client was blocked and later reactivated, so there could be
- * pending query buffer, already representing a full command, to process. */
+ * pending query buffer, already representing a full command, to process.
+ * 解析客户端命令
+ */
 void processInputBuffer(client *c) {
     server.current_client = c;
 
@@ -1476,7 +1500,9 @@ void processInputBuffer(client *c) {
         if (c->argc == 0) {
             resetClient(c);
         } else {
-            /* Only reset the client when the command was executed. */
+            /* Only reset the client when the command was executed.
+             * 解析客户端命令
+             */
             if (processCommand(c) == C_OK) {
                 if (c->flags & CLIENT_MASTER && !(c->flags & CLIENT_MULTI)) {
                     /* Update the applied replication offset of our master. */
@@ -1512,6 +1538,7 @@ void processInputBuffer(client *c) {
  * raw processInputBuffer(). */
 void processInputBufferAndReplicate(client *c) {
     if (!(c->flags & CLIENT_MASTER)) {
+        // 处理客户端命令
         processInputBuffer(c);
     } else {
         size_t prev_offset = c->reploff;
@@ -1527,6 +1554,7 @@ void processInputBufferAndReplicate(client *c) {
 
 /**
  * 读取客户端命令的处理器
+ * 处理客户端输入的命令，这个函数是客户端可读时的回调函数
  * @param el
  * @param fd
  * @param privdata
@@ -1558,7 +1586,9 @@ void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
 
     qblen = sdslen(c->querybuf);
     if (c->querybuf_peak < qblen) c->querybuf_peak = qblen;
+    // 为缓冲区申请空间，保存客户端命令
     c->querybuf = sdsMakeRoomFor(c->querybuf, readlen);
+    // 从客户端读取命令，保存在c->querybuf中
     nread = read(fd, c->querybuf+qblen, readlen);
     if (nread == -1) {
         if (errno == EAGAIN) {
@@ -1600,7 +1630,9 @@ void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
      * processing the buffer, to understand how much of the replication stream
      * was actually applied to the master state: this quantity, and its
      * corresponding part of the replication stream, will be propagated to
-     * the sub-slaves and to the replication backlog. */
+     * the sub-slaves and to the replication backlog.
+     * 处理客户端命令
+     */
     processInputBufferAndReplicate(c);
 }
 

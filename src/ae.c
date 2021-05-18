@@ -151,11 +151,15 @@ int aeCreateFileEvent(aeEventLoop *eventLoop, int fd, int mask,
     }
     aeFileEvent *fe = &eventLoop->events[fd];
 
+    // 将文件描述符和需要监听的事件添加到IO多路复用函数中
     if (aeApiAddEvent(eventLoop, fd, mask) == -1)
         return AE_ERR;
+    // 将监听事件保存在事件驱动中
     fe->mask |= mask;
+    // 设置回调函数
     if (mask & AE_READABLE) fe->rfileProc = proc;
     if (mask & AE_WRITABLE) fe->wfileProc = proc;
+    // 设置参数
     fe->clientData = clientData;
     if (fd > eventLoop->maxfd)
         eventLoop->maxfd = fd;
@@ -420,6 +424,8 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
          * 调用IO多路复用函数：select、epoll、evport、kqueue中的一种。
          * 阻塞等待事件变成就绪状态或者超时，如果有事件就绪就将对应的事件加入到EventLoop
          * 的待处理事件队列eventLoop->fired中，然后进入下一个循环
+         *
+         * numevents是被激活事件的个数
          * */
         numevents = aeApiPoll(eventLoop, tvp);
 
@@ -453,7 +459,9 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
              * didn't processed, so we check if the event is still valid.
              *
              * Fire the readable event if the call sequence is not
-             * inverted. */
+             * inverted.
+             * 根据激活原因调用回调函数，先可读事件，再可写事件
+             */
             if (!invert && fe->mask & mask & AE_READABLE) {
                 // 处理读事件
                 fe->rfileProc(eventLoop,fd,fe->clientData,mask);
@@ -513,6 +521,7 @@ int aeWait(int fd, int mask, long long milliseconds) {
 
 void aeMain(aeEventLoop *eventLoop) {
     eventLoop->stop = 0;
+    // 循环监听
     while (!eventLoop->stop) {
         if (eventLoop->beforesleep != NULL)
             eventLoop->beforesleep(eventLoop);

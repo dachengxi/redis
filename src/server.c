@@ -2156,7 +2156,10 @@ void initServer(void) {
     /* Create an event handler for accepting new connections in TCP and Unix
      * domain sockets. */
     for (j = 0; j < server.ipfd_count; j++) {
-        // 为事件循环注册一个可读事件，响应客户端的请求
+        /**
+         * 为事件循环注册一个可读事件，用来响应客户端的请求
+         * 创建监听套接字
+         */
         if (aeCreateFileEvent(server.el, server.ipfd[j], AE_READABLE,
             acceptTcpHandler,NULL) == AE_ERR)
             {
@@ -2583,7 +2586,9 @@ void call(client *c, int flags) {
  *
  * If C_OK is returned the client is still alive and valid and
  * other operations can be performed by the caller. Otherwise
- * if C_ERR is returned the client was destroyed (i.e. after QUIT). */
+ * if C_ERR is returned the client was destroyed (i.e. after QUIT).
+ * 解析客户端命令
+ */
 int processCommand(client *c) {
     moduleCallCommandFilters(c);
 
@@ -2598,7 +2603,9 @@ int processCommand(client *c) {
     }
 
     /* Now lookup the command and check ASAP about trivial error conditions
-     * such as wrong arity, bad command name and so forth. */
+     * such as wrong arity, bad command name and so forth.
+     * 从命令字典中查找该命令名字，将命令保存在cmd中，包含了命令对应的处理函数
+     */
     c->cmd = c->lastcmd = lookupCommand(c->argv[0]->ptr);
     if (!c->cmd) {
         flagTransaction(c);
@@ -2779,6 +2786,7 @@ int processCommand(client *c) {
         queueMultiCommand(c);
         addReply(c,shared.queued);
     } else {
+        // 调用命令处理函数
         call(c,CMD_CALL_FULL);
         c->woff = server.master_repl_offset;
         if (listLength(server.ready_keys))
@@ -4225,6 +4233,10 @@ int redisIsSupervised(int mode) {
  * @param argc
  * @param argv
  * @return
+ *
+ * Redis处理流程：
+ * 文件描述符 --> IO多路复用器 --> 文件事件分发器 --> 各个文件事件处理器
+ *
  */
 int main(int argc, char **argv) {
     struct timeval tv;
@@ -4383,7 +4395,10 @@ int main(int argc, char **argv) {
     int background = server.daemonize && !server.supervised;
     if (background) daemonize();
 
-    // 根据配置参数，初始化服务器
+    /**
+     * 根据配置参数，初始化服务器
+     * 创建监听套接字
+     */
     initServer();
     if (background || server.pidfile) createPidFile();
     redisSetProcTitle(argv[0]);
@@ -4439,7 +4454,9 @@ int main(int argc, char **argv) {
 
     aeSetBeforeSleepProc(server.el,beforeSleep);
     aeSetAfterSleepProc(server.el,afterSleep);
-    // 执行事件循环，等待连接和命令请求
+    /**
+     * 执行事件驱动循环，在循环中调用IO复用函数进行监听，等待连接和命令请求
+     */
     aeMain(server.el);
     aeDeleteEventLoop(server.el);
     return 0;
