@@ -68,7 +68,13 @@ typedef void aeEventFinalizerProc(struct aeEventLoop *eventLoop, void *clientDat
 typedef void aeBeforeSleepProc(struct aeEventLoop *eventLoop);
 
 /* File event structure
- * 对事件的封装，内部保存又监听的文件描述符、监听的事件、回调函数
+ * 对事件的封装，内部保存有监听的文件描述符、监听的事件、回调函数
+ */
+/**
+ * 文件事件
+ * redis服务器通过套接字与客户端连接，文件事件是服务器对套接字操作的抽象。
+ * 服务端与客户端的通信会产生相应的文件事件，服务器通过监听并处理这些事件
+ * 来完成一系列网络通信操作。
  */
 typedef struct aeFileEvent {
     int mask; /* one of AE_(READABLE|WRITABLE|BARRIER) */
@@ -78,10 +84,29 @@ typedef struct aeFileEvent {
 } aeFileEvent;
 
 /* Time event structure */
+/**
+ * 时间事件
+ * redis服务器中一些操作需要在给定的时间点执行，时间事件就是服务器对这类定时操作的抽象。
+ *
+ * 时间事件分为两类：
+ * - 定时事件：在指定的时间后执行一次
+ * - 周期性事件：每个指定的时间执行一次
+ *
+ * 一个时间事件是定时事件还是周期性事件取决于时间事件处理器的返回值：
+ * - 返回AE_NOMORE，为定时事件，该事件在达到一次之后就会被删除，之后不再到达
+ * - 返回非AE_NOMORE，为周期性事件，服务器会根据事件处理器返回的值，对时间事件的when
+ *   属性进行更新，让这个事件在一段时候之后再次到达。
+ *
+ * 所有时间事件都放在一个无序链表中，当时间事件执行器运行时，就遍历整个链表，查找所有已经
+ * 到达的时间事件，并调用相应的事件处理器。
+ */
 typedef struct aeTimeEvent {
+    // 服务器为时间事件创建的全局唯一ID，从小到大顺序递增
     long long id; /* time event identifier. */
+    // when 时间事件到达的时间
     long when_sec; /* seconds */
     long when_ms; /* milliseconds */
+    // 时间事件处理器
     aeTimeProc *timeProc;
     aeEventFinalizerProc *finalizerProc;
     void *clientData;

@@ -135,6 +135,7 @@ void aeStop(aeEventLoop *eventLoop) {
 
 /**
  * 创建一个文件事件
+ * 将给定套接字的给定事件加入到IO多路复用程序的监听范围内，并对事件和事件处理器进行关联。
  * @param eventLoop 事件循环，一个服务器只有一个
  * @param fd 表示客户端连接的文件描述符，每个客户端连接对应一个
  * @param mask 事件，比如AE_READABLE可读事件
@@ -166,6 +167,13 @@ int aeCreateFileEvent(aeEventLoop *eventLoop, int fd, int mask,
     return AE_OK;
 }
 
+/**
+ * 删除一个文件事件
+ * 让IO多路复用程序取消对给定套接字的给定事件的监听，并取消事件和事件处理器间的关联
+ * @param eventLoop 事件循环
+ * @param fd 套接字描述符
+ * @param mask
+ */
 void aeDeleteFileEvent(aeEventLoop *eventLoop, int fd, int mask)
 {
     if (fd >= eventLoop->setsize) return;
@@ -188,6 +196,13 @@ void aeDeleteFileEvent(aeEventLoop *eventLoop, int fd, int mask)
     }
 }
 
+/**
+ * 获取一个文件事件
+ * 返回该套接字正在被监听的事件类型
+ * @param eventLoop 事件循环
+ * @param fd 套接字描述符
+ * @return
+ */
 int aeGetFileEvents(aeEventLoop *eventLoop, int fd) {
     if (fd >= eventLoop->setsize) return 0;
     aeFileEvent *fe = &eventLoop->events[fd];
@@ -218,6 +233,15 @@ static void aeAddMillisecondsToNow(long long milliseconds, long *sec, long *ms) 
     *ms = when_ms;
 }
 
+/**
+ * 将一个新的时间事件添加到服务器
+ * @param eventLoop
+ * @param milliseconds 定时或者周期的时间
+ * @param proc 时间事件处理器
+ * @param clientData
+ * @param finalizerProc
+ * @return
+ */
 long long aeCreateTimeEvent(aeEventLoop *eventLoop, long long milliseconds,
         aeTimeProc *proc, void *clientData,
         aeEventFinalizerProc *finalizerProc)
@@ -240,6 +264,12 @@ long long aeCreateTimeEvent(aeEventLoop *eventLoop, long long milliseconds,
     return id;
 }
 
+/**
+ * 从服务器中删除ID对应的时间事件
+ * @param eventLoop
+ * @param id
+ * @return
+ */
 int aeDeleteTimeEvent(aeEventLoop *eventLoop, long long id)
 {
     aeTimeEvent *te = eventLoop->timeEventHead;
@@ -264,6 +294,11 @@ int aeDeleteTimeEvent(aeEventLoop *eventLoop, long long id)
  *    Much better but still insertion or deletion of timers is O(N).
  * 2) Use a skiplist to have this operation as O(1) and insertion as O(log(N)).
  */
+/**
+ * 返回到达时间距离当前时间最接近的那个时间事件
+ * @param eventLoop
+ * @return
+ */
 static aeTimeEvent *aeSearchNearestTimer(aeEventLoop *eventLoop)
 {
     aeTimeEvent *te = eventLoop->timeEventHead;
@@ -280,6 +315,12 @@ static aeTimeEvent *aeSearchNearestTimer(aeEventLoop *eventLoop)
 }
 
 /* Process time events */
+/**
+ * 时间事件的执行器
+ * 遍历所有已到达的时间事件，并调用这些事件的处理器
+ * @param eventLoop
+ * @return
+ */
 static int processTimeEvents(aeEventLoop *eventLoop) {
     int processed = 0;
     aeTimeEvent *te;
@@ -368,6 +409,13 @@ static int processTimeEvents(aeEventLoop *eventLoop) {
  * the events that's possible to process without to wait are processed.
  *
  * The function returns the number of events processed. */
+/**
+ * 文件事件分派器
+ * 先调用aeApiPoll函数来等待事件产生，然后遍历所有已产生的事件，并调用相应事件处理器来处理这些事件
+ * @param eventLoop
+ * @param flags
+ * @return
+ */
 int aeProcessEvents(aeEventLoop *eventLoop, int flags)
 {
     int processed = 0, numevents;
@@ -499,6 +547,13 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
 
 /* Wait for milliseconds until the given file descriptor becomes
  * writable/readable/exception */
+/**
+ * 在给定时间内阻塞并等待套接字的给定类型时间产生，当事件成功产生或者等待超时之后，函数返回
+ * @param fd 套接字描述符
+ * @param mask 事件类型
+ * @param milliseconds 超时事件，毫秒
+ * @return
+ */
 int aeWait(int fd, int mask, long long milliseconds) {
     struct pollfd pfd;
     int retmask = 0, retval;

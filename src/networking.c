@@ -750,9 +750,10 @@ static void acceptCommonHandler(int fd, int flags, char *ip) {
 }
 
 /**
- * 接收客户端连接请求的处理器
- * 每当接收到一个客户端请求的时候，服务器就会根据客户端文件描述符创建一个
- * 客户端实例
+ * 连接应答处理器，用来对连接服务器的各个客户端进行应答
+ * 当redis服务器进行初始化的时候，程序会将连接应答处理器和服务器监听套接字的AE_READABLE事件
+ * 关联起来，当客户端使用connect函数连接服务器监听套接字的时候，套接字会产生AE_READABLE事件，
+ * 引发连接应答处理器执行，并执行相应的套接字应答操作。
  * @param el
  * @param fd
  * @param privdata
@@ -1099,7 +1100,10 @@ int writeToClient(int fd, client *c, int handler_installed) {
 
 /* Write event handler. Just send data to the client. */
 /**
- * 返回处理结果的处理器
+ * 命令回复处理器，负责将服务器执行命令后得到的命令回复通过套接字返回个客户端
+ * 当服务器有命令回复需要传送给客户端的时候，服务器会将客户端套接字的AE_WRITEABLE事件
+ * 和命令回复处理器关联起来，当客户端准备好接收服务器传回的命令回复时，就会产生AE_WRITEABLE事件，
+ * 引发命令回复处理器执行，并执行相应的套接字写入操作。
  * @param el
  * @param fd
  * @param privdata
@@ -1553,8 +1557,10 @@ void processInputBufferAndReplicate(client *c) {
 }
 
 /**
- * 读取客户端命令的处理器
- * 处理客户端输入的命令，这个函数是客户端可读时的回调函数
+ * 命令请求处理器，负责从套接字中读入客户端发送的命令请求内容
+ * 当一个客户端通过连接应答处理器成功连接到服务器之后，服务器会将客户端套接字的AE_READABLE事件
+ * 和命令请求处理器关联起来，当客户端向服务器发送命令请求的时候，套接字就会产生AE_READABLE事件，
+ * 引发命令请求处理器执行，并执行相应的套接字读入操作。
  * @param el
  * @param fd
  * @param privdata
