@@ -110,11 +110,15 @@ typedef struct aeTimeEvent {
     aeTimeProc *timeProc;
     aeEventFinalizerProc *finalizerProc;
     void *clientData;
+    // 时间事件使用链表维护
     struct aeTimeEvent *prev;
     struct aeTimeEvent *next;
 } aeTimeEvent;
 
 /* A fired event */
+/**
+ * 触发的事件
+ */
 typedef struct aeFiredEvent {
     int fd;
     int mask;
@@ -128,10 +132,15 @@ typedef struct aeEventLoop {
     int setsize; /* max number of file descriptors tracked */
     long long timeEventNextId;
     time_t lastTime;     /* Used to detect system clock skew */
+    // 文件事件
     aeFileEvent *events; /* Registered events 注册的事件，被EventLoop监听 */
+    // 被触发的事件
     aeFiredEvent *fired; /* Fired events 有读写操作需要执行的事件，就绪事件*/
+    // 时间事件
     aeTimeEvent *timeEventHead;
+    // 事件循环结束标识
     int stop;
+    // 不同的IO多路复用技术，需要不同的数据
     void *apidata; /* This is used for polling API specific data */
     aeBeforeSleepProc *beforesleep;
     aeBeforeSleepProc *aftersleep;
