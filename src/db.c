@@ -1183,7 +1183,15 @@ int keyIsExpired(redisDb *db, robj *key) {
  *
  * The return value of the function is 0 if the key is still valid,
  * otherwise the function returns 1 if the key is expired. */
+/**
+ * 惰性删除的实现
+ * 键过期了，返回1；键未过期，返回0
+ * @param db
+ * @param key
+ * @return
+ */
 int expireIfNeeded(redisDb *db, robj *key) {
+    // 判断键是否已过期，未过期，返回0
     if (!keyIsExpired(db,key)) return 0;
 
     /* If we are running in the context of a slave, instead of
@@ -1194,13 +1202,31 @@ int expireIfNeeded(redisDb *db, robj *key) {
      * Still we try to return the right information to the caller,
      * that is, 0 if we think the key should be still valid, 1 if
      * we think the key is expired at this time. */
+    // 键已过期，并且当前是在从机器上，直接返回1，不做过期键的删除操作
     if (server.masterhost != NULL) return 1;
 
     /* Delete the key */
+    // 过期键计数器加1
     server.stat_expiredkeys++;
+    /**
+     * propagateExpire字面意思是传播过期。
+     * 删除过期键是在主机器上，需要将删除的事情通知出去：
+     * - 如果开启了AOF，需要为这个要删除的键在AOF文件中记录一条删除日志
+     * - 如果当前主机器有从机器的话，需要向所有的从机器发送删除键的命令
+     */
     propagateExpire(db,key,server.lazyfree_lazy_expire);
+    // 发起键过期的通知
     notifyKeyspaceEvent(NOTIFY_EXPIRED,
         "expired",key,db->id);
+    /**
+     * lazyfree_lazy_expire的值是在配置文件中配置的，在键过期的时候使用该配置
+     * 来控制是否进行异步删除过期键。
+     * dbAsyncDelete 异步删除
+     * dbSyncDelete 同步删除
+     *
+     * redis是单线程的，如果删除的时候耗时过长，会影响到redis性能，并导致请求阻塞掉，
+     * 因此可以选择配置中开启惰性释放，异步删除。
+     */
     return server.lazyfree_lazy_expire ? dbAsyncDelete(db,key) :
                                          dbSyncDelete(db,key);
 }

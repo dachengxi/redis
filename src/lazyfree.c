@@ -75,17 +75,34 @@ size_t lazyfreeGetFreeEffort(robj *obj) {
  * a lazy free list instead of being freed synchronously. The lazy free list
  * will be reclaimed in a different bio.c thread. */
 #define LAZYFREE_THRESHOLD 64
+/**
+ * redis的异步删除
+ * 实际上redis实现的时候，并不是直接开启线程进行异步删除，而是权衡了进行异步删除和直接同步删除的
+ * 影响后，根据实际情况选择是否使用异步删除。
+ *
+ * 另外删除的时候也不是真正直接释放掉对应内存，而是从redis数据库中将键给删除掉，后续再做数据的清理。
+ * @param db
+ * @param key
+ * @return
+ */
 int dbAsyncDelete(redisDb *db, robj *key) {
     /* Deleting an entry from the expires dict will not free the sds of
      * the key, because it is shared with the main dictionary. */
+    // 从数据库的过期键expires中删除到键，只删除指针，并没有删除实际值
     if (dictSize(db->expires) > 0) dictDelete(db->expires,key->ptr);
 
     /* If the value is composed of a few allocations, to free in a lazy way
      * is actually just slower... So under a certain limit we just free
      * the object synchronously. */
+    // 从数据库的字典dict中删除键，删除指针，并没有删除实际值
     dictEntry *de = dictUnlink(db->dict,key->ptr);
     if (de) {
         robj *val = dictGetVal(de);
+        /**
+         * 需要先评估下，如果直接删除影响较小，就在主线程中直接删除掉。
+         * 在开启线程异步执行的时候，是需要进行加锁的，加锁后将异步任务提交到队列中，
+         * 有可能直接删除的影响会小于加锁的影响。
+         */
         size_t free_effort = lazyfreeGetFreeEffort(val);
 
         /* If releasing the object is too much work, do it in the background
@@ -96,6 +113,10 @@ int dbAsyncDelete(redisDb *db, robj *key) {
          * objects, and then call dbDelete(). In this case we'll fall
          * through and reach the dictFreeUnlinkedEntry() call, that will be
          * equivalent to just calling decrRefCount(). */
+        /**
+         * 如果释放对象需要做大量工作，对主线程影响较大，就需要开启一个新线程异步去做删除。
+         * refcount>1，说明对象是共享对象。
+         */
         if (free_effort > LAZYFREE_THRESHOLD && val->refcount == 1) {
             atomicIncr(lazyfree_objects,1);
             bioCreateBackgroundJob(BIO_LAZY_FREE,val,NULL,NULL);
@@ -105,6 +126,7 @@ int dbAsyncDelete(redisDb *db, robj *key) {
 
     /* Release the key-val pair, or just the key if we set the val
      * field to NULL in order to lazy free it later. */
+    // 释放key和val占用的内存空间
     if (de) {
         dictFreeUnlinkedEntry(db->dict,de);
         if (server.cluster_enabled) slotToKeyDel(key);

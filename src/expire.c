@@ -94,6 +94,13 @@ int activeExpireCycleTryExpire(redisDb *db, dictEntry *de, long long now) {
  * executed, where the time limit is a percentage of the REDIS_HZ period
  * as specified by the ACTIVE_EXPIRE_CYCLE_SLOW_TIME_PERC define. */
 
+/**
+ * 过期键定期删除策略。
+ * redis的时间事件是serverCron执行的时候，activeExpireCycle就会被调用，
+ * 在规定的时间内，分多次遍历服务器中的各个数据库，从数据库的expires字典中随机
+ * 检查一部分键的过期时间，并删除过期键
+ * @param type
+ */
 void activeExpireCycle(int type) {
     /* This function has some global state in order to continue the work
      * incrementally across calls. */

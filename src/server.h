@@ -646,8 +646,50 @@ typedef struct clientReplyBlock {
 /* Redis database representation. There are multiple databases identified
  * by integers from 0 (the default database) up to the max configured
  * database. The database number is the 'id' field in the structure. */
+/**
+ * redisDb代表redis服务器中的一个数据库
+ */
 typedef struct redisDb {
+    /**
+     * dict字典中保存了数据库中的所有键值对，
+     * 这个字典称为键空间（key space）
+     */
     dict *dict;                 /* The keyspace for this DB */
+    /**
+     * expires字典（过期字典）中保存了所有键的过期时间，
+     * 键是一个指针，指向键空间中某个键对象
+     * 值是一个long long类型的整数，表示键的过期时间，毫秒时间戳
+     *
+     * 过期键的删除策略：
+     * - 定时删除，在设置键过期时间的同时，创建一个定时器，让定时器在键的过期时间来临时，立即执行对键的删除操作
+     * - 惰性删除，每次从键空间中获取键时，检查要获取的键是否过期，如果过期就删除该键；如果没有过期就返回该键
+     * - 定期删除，每隔一段时间，程序对数据库进行一次检查，删除里面的过期键。
+     * 定时删除和定期删除是主动删除策略，惰性删除是被动删除策略。
+     *
+     * 定时删除
+     * 优点：
+     * - 对内存友好，能及时删除过期的键，释放所占用的内存
+     * 缺点：
+     * - 占用CPU，过期键较多的情况峡，定时删除过期键可能会占用相当一部分的CPU时间
+     * - 定时需要用到Redis时间事件，时间事件实现方式是无序链表，查找事件复杂度O(N)
+     *
+     * 惰性删除
+     * 优点：
+     * - 对CPU友好，只会在取出的时候才会对键进行过期检查，可保证过期键能被删除掉，并且不会在删除其他无关的过期键上花费CPU时间
+     * 缺点：
+     * - 对内存不友好，如果一个键已过期，但键仍旧留在数据库中，占用的内存一直不会被释放掉。
+     * - 如果有非常多的过期键，一直没有被访问到，则永远都不会被删除，会造成内存泄漏。
+     *
+     * 定期删除
+     * 优点：
+     * - 每隔一段时间执行一次删除操作，可通过限制删除操作执行时长和频率来减少对CPU的占用
+     * - 定期删除可以减少过期键带来的内存浪费
+     * 缺点：
+     * - 如果删除操作执行太频繁或者执行时间太长，定期删除策略会退化成定时删除策略，浪费过多的CPU
+     * - 如果删除操作执行太少或者时间太短，定期删除策略会和惰性删除策略一样，出现内存浪费的情况
+     *
+     * Redis使用惰性删除和定期删除两种策略，通过两种策略配合，可以在避免浪费CPU时间和避免浪费内存间取得平衡。
+     */
     dict *expires;              /* Timeout of keys with a timeout set */
     dict *blocking_keys;        /* Keys with clients waiting for data (BLPOP)*/
     dict *ready_keys;           /* Blocked keys that received a PUSH */
@@ -722,9 +764,16 @@ typedef struct readyList {
 
 /* With multiplexing we need to take per-client state.
  * Clients are taken in a linked list. */
+/**
+ * 代表客户端状态
+ */
 typedef struct client {
     uint64_t id;            /* Client incremental unique ID. */
     int fd;                 /* Client socket. */
+    /**
+     * db记录了客户端当前的目标数据库
+     * 是指向redisDb结构的指针
+     */
     redisDb *db;            /* Pointer to currently SELECTed DB. */
     robj *name;             /* As set by CLIENT SETNAME. */
     sds querybuf;           /* Buffer we use to accumulate client queries. */
@@ -939,6 +988,9 @@ struct clusterState;
 #define CHILD_INFO_TYPE_RDB 0
 #define CHILD_INFO_TYPE_AOF 1
 
+/**
+ * 表示服务器状态
+ */
 struct redisServer {
     /* General */
     pid_t pid;                  /* Main process pid. */
@@ -950,6 +1002,11 @@ struct redisServer {
                                    the actual 'hz' field value if dynamic-hz
                                    is enabled. */
     int hz;                     /* serverCron() calls frequency in hertz */
+    /**
+     * db数组
+     * 数组中每一项都是一个redisDb结构，
+     * 每个redisDb代表一个数据库
+     */
     redisDb *db;
     dict *commands;             /* Command table */
     dict *orig_commands;        /* Command table before command renaming. */
@@ -1020,6 +1077,11 @@ struct redisServer {
     double stat_expired_stale_perc; /* Percentage of keys probably expired */
     long long stat_expired_time_cap_reached_count; /* Early expire cylce stops.*/
     long long stat_evictedkeys;     /* Number of evicted keys (maxmemory) */
+    /**
+     * 读取一个键之后（读操作和写操作都要对键进行读取），服务器会根据
+     * 键是否存在来更新服务器的键空间命中（stat_keyspace_hits）和
+     * 键空间不命中（stat_keyspace_misses）次数
+     */
     long long stat_keyspace_hits;   /* Number of successful lookups of keys */
     long long stat_keyspace_misses; /* Number of failed lookups of keys */
     long long stat_active_defrag_hits;      /* number of allocations moved */
@@ -1064,6 +1126,10 @@ struct redisServer {
     int active_defrag_cycle_max;       /* maximal effort for defrag in CPU percentage */
     unsigned long active_defrag_max_scan_fields; /* maximum number of fields of set/hash/zset/list to process from within the main dict scan */
     size_t client_max_querybuf_len; /* Limit for client query buffer length */
+    /**
+     * 服务器初始化的时候，会根据dbnum个数来创建数据库
+     * dbnum属性值由配置中的database决定，默认16
+     */
     int dbnum;                      /* Total number of configured DBs */
     int supervised;                 /* 1 if supervised, 0 otherwise. */
     int supervised_mode;            /* See SUPERVISED_* */
@@ -1108,6 +1174,10 @@ struct redisServer {
                                       to child process. */
     sds aof_child_diff;             /* AOF diff accumulator child side. */
     /* RDB persistence */
+    /**
+     * 服务器每次修改一个键后，会将dirty计数器加1，
+     * 这个计数器会触发服务器的持久化以及复制操作
+     */
     long long dirty;                /* Changes to DB from the last save */
     long long dirty_before_bgsave;  /* Used to restore dirty on failed BGSAVE */
     pid_t rdb_child_pid;            /* PID of RDB saving child */
