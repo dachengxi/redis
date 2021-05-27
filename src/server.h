@@ -227,23 +227,52 @@ typedef long long ustime_t; /* microsecond time type. */
 #define AOF_WAIT_REWRITE 2    /* AOF waits rewrite to start appending */
 
 /* Client flags */
+// 表示客户端是从服务器
 #define CLIENT_SLAVE (1<<0)   /* This client is a slave server */
+// 表示客户端是主服务器
 #define CLIENT_MASTER (1<<1)  /* This client is a master server */
+// 表示客户端正在执行MONITOR命令
 #define CLIENT_MONITOR (1<<2) /* This client is a slave monitor, see MONITOR */
+// 表示客户端正在执行事务
 #define CLIENT_MULTI (1<<3)   /* This client is in a MULTI context */
+// 表示客户端正在被BRPOP、BLPOP等命令阻塞
 #define CLIENT_BLOCKED (1<<4) /* The client is waiting in a blocking operation */
+// 表示事务使用WATCH命令监视的数据库键已被修改
 #define CLIENT_DIRTY_CAS (1<<5) /* Watched keys modified. EXEC will fail. */
+/**
+ * 表示有用户对这个客户端执行了CLIENT KILL命令，
+ * 或者客户端发送给服务器的命令请求中包含错误的协议内容。
+ * 服务器会将客户端积存在输出缓冲区中的所有内容发送给客户端，然后关闭客户端。
+ */
 #define CLIENT_CLOSE_AFTER_REPLY (1<<6) /* Close after writing entire reply. */
+// 表示客户端已经从REDIS_BLOCKED标志所表示的阻塞状态脱离，不再阻塞
 #define CLIENT_UNBLOCKED (1<<7) /* This client was unblocked and is stored in
                                   server.unblocked_clients */
+// 表示客户端是专门用于处理lua脚本里面包含的redis命令的伪客户端
 #define CLIENT_LUA (1<<8) /* This is a non connected client used by Lua */
+// 表示客户端向集群节点发送了ASKING命令
 #define CLIENT_ASKING (1<<9)     /* Client issued the ASKING command */
+/**
+ * 表示客户端的输出缓冲区大小超出了服务器允许的范围，
+ * 服务器会在下一次执行serverCron时关闭这个客户端，
+ * 防止服务器稳定性受到这个客户端影响，积存在输出缓冲区中的所有
+ * 内容会被直接释放，不会返回给客户端
+ */
 #define CLIENT_CLOSE_ASAP (1<<10)/* Close this client ASAP */
+// 表示服务器使用UNIX套接字来连接客户端
 #define CLIENT_UNIX_SOCKET (1<<11) /* Client connected via Unix domain socket */
+// 表示事务在命令入队时出现了错误
 #define CLIENT_DIRTY_EXEC (1<<12)  /* EXEC will fail for errors while queueing */
 #define CLIENT_MASTER_FORCE_REPLY (1<<13)  /* Queue replies even if is master */
+// 强制服务区将当前执行的命令写入到AOF文件里
 #define CLIENT_FORCE_AOF (1<<14)   /* Force AOF propagation of current cmd. */
+// 强制主服务器将当前执行的命令复制给所有从服务器
 #define CLIENT_FORCE_REPL (1<<15)  /* Force replication of current cmd. */
+/**
+ * 表示客户端是一个版本低于redis2.8的从服务器，
+ * 主服务器不能使用PSYNC命令与这个从服务器进行同步。
+ * 这个标志只能在REDIS_SLAVE标志处于打开状态才能使用。
+ */
 #define CLIENT_PRE_PSYNC (1<<16)   /* Instance don't understand PSYNC. */
 #define CLIENT_READONLY (1<<17)    /* Cluster client is in read-only state. */
 #define CLIENT_PUBSUB (1<<18)      /* Client is in Pub/Sub mode. */
@@ -765,17 +794,49 @@ typedef struct readyList {
 /* With multiplexing we need to take per-client state.
  * Clients are taken in a linked list. */
 /**
- * 代表客户端状态
+ * client代表客户端状态
+ *
+ * 客户端分为两种：普通客户端和伪客户端（执行lua脚本中redis命令的伪客户端和执行AOF包含命令的伪客户端）
+ *
+ * 普通客户端创建：
+ * 客户端使用connect函数连接到服务器时，服务器会调用连接事件处理器，为客户端创建相应的客户端状态，
+ * 并将这个新的客户端加入到服务器状态redisServer的clients链表的末尾
+ *
+ * lua脚本的伪客户端
+ * 服务器在初始化的时候会创建负责执行lua脚本中包含的redis命令的伪客户端，并将这个伪客户端关联到服务器
+ * 状态redisServer的lua_client属性中。
+ * lua_client在服务器运行的整个生命周期中一直存在，只有在服务器被关闭，这个客户端才会被关闭
+ *
+ * AOF文件的伪客户端
+ * 服务器在载入AOF文件时会创建用于执行AOF文件包含的redis命令的伪客户端，并在载入完成后关闭这个伪客户端。
  */
 typedef struct client {
     uint64_t id;            /* Client incremental unique ID. */
+    /**
+     * 客户端套接字描述符
+     * 伪客户端（fake client）的描述符是-1，伪客户端处理的命令请求来源于AOF文件或者lua脚本，而不是网络。
+     * 目前有两个地方用到伪客户端：
+     * - 载入AOF文件并还原数据库状态的时候
+     * - 执行lua脚本中包含redis命令的时候
+     *
+     * 普通客户端的描述符为大于-1的整数
+     */
     int fd;                 /* Client socket. */
     /**
      * db记录了客户端当前的目标数据库
      * 是指向redisDb结构的指针
      */
     redisDb *db;            /* Pointer to currently SELECTed DB. */
+    // 客户端名字
     robj *name;             /* As set by CLIENT SETNAME. */
+    /**
+     * 客户端输入缓冲区
+     * 用于保存客户端发送的命令请求
+     * 输入缓冲区大小会根据输入内容动态的缩小或者扩大，但它的最大
+     * 大小不能超过1G，否则服务器将关闭这个客户端。
+     * 服务器将客户端发送的命令请求保存到客户端的输入缓冲区后，服务器
+     * 会对命令请求内容进行分析，得到命令参数和命令参数个数，分别保存在：argv和argc属性中
+     */
     sds querybuf;           /* Buffer we use to accumulate client queries. */
     size_t qb_pos;          /* The position we have read in querybuf. */
     sds pending_querybuf;   /* If this client is flagged as master, this buffer
@@ -783,20 +844,59 @@ typedef struct client {
                                replication stream that we are receiving from
                                the master. */
     size_t querybuf_peak;   /* Recent (100ms or more) peak of querybuf size. */
+    /**
+     * argc表示命令请求中的命令参数个数，也就是argv数组的长度
+     */
     int argc;               /* Num of arguments of current command. */
+    /**
+     * argv表示命令请求中命令参数，是一个数组，
+     * 数组中每一项都是一个字符串对象，
+     * argv[0]是要执行的命令，其他的是传给命令的参数
+     */
     robj **argv;            /* Arguments of current command. */
+    /**
+     * 服务器解析完命令请求后，得到argv[0]是要执行的命令，就会根据该命令
+     * 到命令表中查找命令对应的实现函数redisCommand。
+     *
+     * 命令表是一个字典，键是sds结构，保存命令名字；值是命令对应的redisCommand结构。
+     *
+     * redisCommand结构保存了命令实现函数、命令的标志、命令应该给定的参数个数、
+     * 命令的总执行次数、命令执行总耗时长等
+     */
     struct redisCommand *cmd, *lastcmd;  /* Last command executed. */
     int reqtype;            /* Request protocol type: PROTO_REQ_* */
     int multibulklen;       /* Number of multi bulk arguments left to read. */
     long bulklen;           /* Length of bulk argument in multi bulk request. */
+    /**
+     * 可变的输出缓冲区
+     */
     list *reply;            /* List of reply objects to send to the client. */
     unsigned long long reply_bytes; /* Tot bytes of objects in reply list. */
     size_t sentlen;         /* Amount of bytes already sent in the current
                                buffer or object being sent. */
+    // 客户端创建时间
     time_t ctime;           /* Client creation time. */
+    /**
+     * 客户端与服务器最后一次进行互动的时间
+     * 可用来计算客户端的空转（idle）时间
+     */
     time_t lastinteraction; /* Time of the last interaction, used for timeout */
+    // 记录了输出缓冲区第一次达到soft limit的时间
     time_t obuf_soft_limit_reached_time;
+    /**
+     * 客户端标志，记录了客户端的角色（role）以及客户端目前所处状态，比如是主还是从。
+     * flags属性值可以是单个标志，也可以是多个标志的二进制或：flag1 | flag2
+     *
+     * 主从复制的时候，主服务器变为从服务器的客户端，从服务器变为主服务器的客户端。
+     * REDIS_MASTER表示客户端是主服务器；REDIS_SLAVE表示客户端是从服务器。
+     * 其他的可参考CLIENT_*宏定义
+     */
     int flags;              /* Client flags: CLIENT_* macros. */
+    /**
+     * 用于记录客户端是否通过了身份验证
+     * 0 表示未通过身份验证
+     * 1 表示通过了身份验证
+     */
     int authenticated;      /* When requirepass is non-NULL. */
     int replstate;          /* Replication state if this is a slave. */
     int repl_put_online_on_ack; /* Install slave write handler on first ACK. */
@@ -826,6 +926,20 @@ typedef struct client {
     listNode *client_list_node; /* list node in client list */
 
     /* Response buffer */
+    /**
+     * 输出缓冲区
+     * 保存执行命令后得到的命令回复
+     *
+     * 每个客户端有两个输出缓冲区，一个是固定大小的输出缓冲区、一个是大小可变的缓冲区
+     * 固定大小的输出缓冲区：buf[PROTO_REPLY_CHUNK_BYTES]，用于保存长度比较小的回复
+     * 大小可变的缓冲区：list *reply，用于保存长度比较大的回复
+     *
+     *
+     * 固定大小的输出缓冲区由buf和bufpos组成：
+     * - buf是一个字节数组
+     * - bufpos记录了buf数组目前已使用的字节数量
+     *
+     */
     int bufpos;
     char buf[PROTO_REPLY_CHUNK_BYTES];
 } client;
