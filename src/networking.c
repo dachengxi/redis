@@ -1492,6 +1492,10 @@ void processInputBuffer(client *c) {
             }
         }
 
+        /**
+         * 对输入缓冲区中的命令请求进行解析，提取出命令请求中包含的命令参数，以及命令参数个数，
+         * 分别保存到客户端的argv数组和argc属性里面
+         */
         if (c->reqtype == PROTO_REQ_INLINE) {
             if (processInlineBuffer(c) != C_OK) break;
         } else if (c->reqtype == PROTO_REQ_MULTIBULK) {
@@ -1505,7 +1509,9 @@ void processInputBuffer(client *c) {
             resetClient(c);
         } else {
             /* Only reset the client when the command was executed.
-             * 解析客户端命令
+             */
+            /**
+             * 执行客户端命令
              */
             if (processCommand(c) == C_OK) {
                 if (c->flags & CLIENT_MASTER && !(c->flags & CLIENT_MULTI)) {
@@ -1592,9 +1598,9 @@ void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
 
     qblen = sdslen(c->querybuf);
     if (c->querybuf_peak < qblen) c->querybuf_peak = qblen;
-    // 为缓冲区申请空间，保存客户端命令
+    // 为输入缓冲区申请空间，保存客户端发送过来的命令请求
     c->querybuf = sdsMakeRoomFor(c->querybuf, readlen);
-    // 从客户端读取命令，保存在c->querybuf中
+    // 从客户端读取命令，保存在客户端client的输入缓冲区querybuf属性中
     nread = read(fd, c->querybuf+qblen, readlen);
     if (nread == -1) {
         if (errno == EAGAIN) {

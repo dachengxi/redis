@@ -2587,7 +2587,7 @@ void call(client *c, int flags) {
  * If C_OK is returned the client is still alive and valid and
  * other operations can be performed by the caller. Otherwise
  * if C_ERR is returned the client was destroyed (i.e. after QUIT).
- * 解析客户端命令
+ * 执行客户端命令
  */
 int processCommand(client *c) {
     moduleCallCommandFilters(c);
@@ -2604,7 +2604,12 @@ int processCommand(client *c) {
 
     /* Now lookup the command and check ASAP about trivial error conditions
      * such as wrong arity, bad command name and so forth.
-     * 从命令字典中查找该命令名字，将命令保存在cmd中，包含了命令对应的处理函数
+     * 客户端client的argv[0]位置保存的是命令，数组中后面的位置中保存的是命令需要的参数
+     *
+     * redis有个命令字典，保存了命令名字和命令实现函数的关系。字典的键是命令的名字，
+     * 字典的值是redisCommand结构，每个redisCommand结构记录了一个redis命令的实现信息。
+     *
+     * 从命令字典中查找命令对应的redisCommand结构，并保存到client的cmd属性中
      */
     c->cmd = c->lastcmd = lookupCommand(c->argv[0]->ptr);
     if (!c->cmd) {
