@@ -49,9 +49,13 @@ struct __attribute__ ((__packed__)) sdshdr5 {
     char buf[];
 };
 struct __attribute__ ((__packed__)) sdshdr8 {
+    // 字符串的实际长度，不包含最后的空字符
     uint8_t len; /* used */
+    // 字符串最大长度，不包含header大小和最后的空字符
     uint8_t alloc; /* excluding the header and null terminator */
+    // header的类型标志
     unsigned char flags; /* 3 lsb of type, 5 unused bits */
+    // 实际存储字符串的字节数组
     char buf[];
 };
 struct __attribute__ ((__packed__)) sdshdr16 {
