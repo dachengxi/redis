@@ -44,39 +44,84 @@
 /* Unused arguments generate annoying warnings... */
 #define DICT_NOTUSED(V) ((void) V)
 
+/**
+ * 哈希表的节点
+ */
 typedef struct dictEntry {
+    // 键
     void *key;
+    // 值
     union {
         void *val;
         uint64_t u64;
         int64_t s64;
         double d;
     } v;
+    // 指向下一个哈希表节点的指针，用来解决冲突（链地址法）
     struct dictEntry *next;
 } dictEntry;
 
+/**
+ * 字典的特定类型函数
+ */
 typedef struct dictType {
+    // 计算哈希值的函数
     uint64_t (*hashFunction)(const void *key);
+    // 复制键的函数
     void *(*keyDup)(void *privdata, const void *key);
+    // 复制值的函数
     void *(*valDup)(void *privdata, const void *obj);
+    // 对比键的函数
     int (*keyCompare)(void *privdata, const void *key1, const void *key2);
+    // 键销毁的函数
     void (*keyDestructor)(void *privdata, void *key);
+    // 值销毁的函数
     void (*valDestructor)(void *privdata, void *obj);
 } dictType;
 
 /* This is our hash table structure. Every dictionary has two of this as we
  * implement incremental rehashing, for the old to the new table. */
+/**
+ * 哈希表
+ *
+ */
 typedef struct dictht {
+    /**
+     * 哈希表数组，每个dictEntry都保存着一个键值对
+     */
     dictEntry **table;
+    // 记录了哈希表的大小
     unsigned long size;
+    // 值总是等于size-1，和哈希值一起决定一个键应该北方到table数组的哪个索引上
     unsigned long sizemask;
+    // 该哈希表已有节点的数量
     unsigned long used;
 } dictht;
 
+/**
+ * 字典
+ * 字典使用哈希表dictht作为底层实现
+ */
 typedef struct dict {
+    /**
+     * 类型特定函数
+     * 每隔dictType结构保存了一些用于操作特定类型
+     * 键值对的函数，可给字典设置不同类型的特定函数
+     */
     dictType *type;
+    /**
+     * privdata属性保存了需要传给类型特定函数的可选参数
+     */
     void *privdata;
+    /**
+     * 字典底层实现是哈希表dictht
+     * 包含两个项的数组，一般字典只使用ht[0]，
+     * ht[1]会在rehash的时候使用
+     */
     dictht ht[2];
+    /**
+     * 记录了rehash的进度，如果没有在进行rehash的话，值为-1
+     */
     long rehashidx; /* rehashing not in progress if rehashidx == -1 */
     unsigned long iterators; /* number of iterators currently running */
 } dict;
