@@ -33,9 +33,15 @@
 
 /* Node, List, and Iterator are the only data structures used currently. */
 
+/**
+ * 链表节点
+ */
 typedef struct listNode {
+    // 前驱节点
     struct listNode *prev;
+    // 后继节点
     struct listNode *next;
+    // 节点存储的值
     void *value;
 } listNode;
 
@@ -44,12 +50,28 @@ typedef struct listIter {
     int direction;
 } listIter;
 
+/**
+ * 链表，由listNode组成
+ * 双端链表
+ * 无环
+ */
 typedef struct list {
+    // 头节点
     listNode *head;
+    // 尾节点
     listNode *tail;
+    /**
+     * dum、free、match用于实现多态链表所需的类型特定函数
+     * 使用这三个属性可以为节点设置类型特定函数，所以链表可以
+     * 保存各种不同类型的值
+     */
+    // 节点值复制函数，复制链表节点保存的值
     void *(*dup)(void *ptr);
+    // 节点值释放函数，释放链表节点保存的值
     void (*free)(void *ptr);
+    // 节点值对比函数，比较链表节点保存的值和另一个输入值是否相等
     int (*match)(void *ptr, void *key);
+    // 链表包含的节点数量
     unsigned long len;
 } list;
 
