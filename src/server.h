@@ -982,14 +982,29 @@ typedef struct zskiplistNode {
     } level[];
 } zskiplistNode;
 
+/**
+ * 跳表
+ */
 typedef struct zskiplist {
     struct zskiplistNode *header, *tail;
     unsigned long length;
     int level;
 } zskiplist;
 
+/**
+ * redis有序集合
+ */
 typedef struct zset {
+    /**
+     * 字典，存储member到score的映射
+     * 字典的键是member
+     * 字典的值是score
+     */
     dict *dict;
+    /**
+     * 跳表
+     * 按照score从小到大包含了所有元素
+     */
     zskiplist *zsl;
 } zset;
 
