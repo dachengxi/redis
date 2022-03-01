@@ -377,6 +377,9 @@ typedef long long ustime_t; /* microsecond time type. */
 /* Anti-warning macro... */
 #define UNUSED(V) ((void) V)
 
+/**
+ * 跳表层高最大值：64
+ */
 #define ZSKIPLIST_MAXLEVEL 64 /* Should be enough for 2^64 elements */
 #define ZSKIPLIST_P 0.25      /* Skiplist P = 1/4 */
 
@@ -972,12 +975,21 @@ struct sharedObjectsStruct {
 };
 
 /* ZSETs use a specialized version of Skiplists */
+/**
+ * 跳表节点
+ */
 typedef struct zskiplistNode {
+    // 存储字符串类型的数据
     sds ele;
+    // 排序的分值
     double score;
+    // 后退指针，只能指向当前节点最底层的前一个节点，头节点和第一个节点指向null
     struct zskiplistNode *backward;
+    // 跳表的层
     struct zskiplistLevel {
+        // 指向本层的下一个节点，尾节点指向null
         struct zskiplistNode *forward;
+        // 本层当前节点和下一个节点之间的跨度
         unsigned long span;
     } level[];
 } zskiplistNode;
@@ -986,8 +998,12 @@ typedef struct zskiplistNode {
  * 跳表
  */
 typedef struct zskiplist {
+    // *header指向跳表头节点，头节点level数组元素个数为64，头节点不存储值，ele为null,score为0
+    // *tail指向跳表尾节点
     struct zskiplistNode *header, *tail;
+    // 跳表长度，除了头节点外的节点总和
     unsigned long length;
+    // 跳表的层数
     int level;
 } zskiplist;
 

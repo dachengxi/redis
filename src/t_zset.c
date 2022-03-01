@@ -68,15 +68,29 @@ int zslLexValueLteMax(sds value, zlexrangespec *spec);
 
 /* Create a skiplist node with the specified number of levels.
  * The SDS string 'ele' is referenced by the node after the call. */
+/**
+ * 创建跳表节点
+ * @param level
+ * @param score
+ * @param ele
+ * @return
+ */
 zskiplistNode *zslCreateNode(int level, double score, sds ele) {
+    // 分配内存
     zskiplistNode *zn =
         zmalloc(sizeof(*zn)+level*sizeof(struct zskiplistLevel));
+    // 设置score
     zn->score = score;
+    // 设置ele
     zn->ele = ele;
     return zn;
 }
 
 /* Create a new skiplist. */
+/**
+ * 创建跳表
+ * @return
+ */
 zskiplist *zslCreate(void) {
     int j;
     zskiplist *zsl;
@@ -84,6 +98,7 @@ zskiplist *zslCreate(void) {
     zsl = zmalloc(sizeof(*zsl));
     zsl->level = 1;
     zsl->length = 0;
+    // 创建头节点，score为0，ele为null
     zsl->header = zslCreateNode(ZSKIPLIST_MAXLEVEL,0,NULL);
     for (j = 0; j < ZSKIPLIST_MAXLEVEL; j++) {
         zsl->header->level[j].forward = NULL;
@@ -119,7 +134,12 @@ void zslFree(zskiplist *zsl) {
  * The return value of this function is between 1 and ZSKIPLIST_MAXLEVEL
  * (both inclusive), with a powerlaw-alike distribution where higher
  * levels are less likely to be returned. */
+/**
+ * 为跳表随机生成一个高度：1～64。
+ * @return
+ */
 int zslRandomLevel(void) {
+    // 初始层为1
     int level = 1;
     while ((random()&0xFFFF) < (ZSKIPLIST_P * 0xFFFF))
         level += 1;
@@ -153,6 +173,7 @@ zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele) {
      * scores, reinserting the same element should never happen since the
      * caller of zslInsert() should test in the hash table if the element is
      * already inside or not. */
+    // 为跳表随机生成一个高度：1～64。
     level = zslRandomLevel();
     if (level > zsl->level) {
         for (i = zsl->level; i < level; i++) {
@@ -162,6 +183,7 @@ zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele) {
         }
         zsl->level = level;
     }
+    // 创建跳表节点
     x = zslCreateNode(level,score,ele);
     for (i = 0; i < level; i++) {
         x->level[i].forward = update[i]->level[i].forward;
