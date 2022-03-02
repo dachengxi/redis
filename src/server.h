@@ -996,6 +996,8 @@ typedef struct zskiplistNode {
 
 /**
  * 跳表
+ *
+ * 跳表主要应用于有序集合（zset）的底层实现
  */
 typedef struct zskiplist {
     // *header指向跳表头节点，头节点level数组元素个数为64，头节点不存储值，ele为null,score为0
@@ -1905,8 +1907,23 @@ typedef struct {
 
 zskiplist *zslCreate(void);
 void zslFree(zskiplist *zsl);
+/**
+ * 跳表插入节点
+ * @param zsl
+ * @param score
+ * @param ele
+ * @return
+ */
 zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele);
 unsigned char *zzlInsert(unsigned char *zl, sds ele, double score);
+/**
+ * 删除跳表的节点
+ * @param zsl
+ * @param score
+ * @param ele
+ * @param node
+ * @return
+ */
 int zslDelete(zskiplist *zsl, double score, sds ele, zskiplistNode **node);
 zskiplistNode *zslFirstInRange(zskiplist *zsl, zrangespec *range);
 zskiplistNode *zslLastInRange(zskiplist *zsl, zrangespec *range);
