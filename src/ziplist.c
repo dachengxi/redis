@@ -227,32 +227,56 @@
 /* Utility macros.*/
 
 /* Return total bytes a ziplist is composed of. */
+/**
+ * 获取zlbytes字段
+ */
 #define ZIPLIST_BYTES(zl)       (*((uint32_t*)(zl)))
 
 /* Return the offset of the last item inside the ziplist. */
+/**
+ * 获取zltail的偏移量
+ */
 #define ZIPLIST_TAIL_OFFSET(zl) (*((uint32_t*)((zl)+sizeof(uint32_t))))
 
 /* Return the length of a ziplist, or UINT16_MAX if the length cannot be
  * determined without scanning the whole ziplist. */
+/**
+ * 获取zllen资源
+ */
 #define ZIPLIST_LENGTH(zl)      (*((uint16_t*)((zl)+sizeof(uint32_t)*2)))
 
 /* The size of a ziplist header: two 32 bit integers for the total
  * bytes count and last item offset. One 16 bit integer for the number
  * of items field. */
+/**
+ * 压缩列表头部大小：zlbytes(4字节) + zltail(4字节) + zllen(2字节) = 10字节
+ */
 #define ZIPLIST_HEADER_SIZE     (sizeof(uint32_t)*2+sizeof(uint16_t))
 
 /* Size of the "end of ziplist" entry. Just one byte. */
+/**
+ * zlen字段的长度：1字节
+ */
 #define ZIPLIST_END_SIZE        (sizeof(uint8_t))
 
 /* Return the pointer to the first entry of a ziplist. */
+/**
+ * 压缩列表中第一个entry的偏移量
+ */
 #define ZIPLIST_ENTRY_HEAD(zl)  ((zl)+ZIPLIST_HEADER_SIZE)
 
 /* Return the pointer to the last entry of a ziplist, using the
  * last entry offset inside the ziplist header. */
+/**
+ * 压缩列表中最后一个entry的偏移量
+ */
 #define ZIPLIST_ENTRY_TAIL(zl)  ((zl)+intrev32ifbe(ZIPLIST_TAIL_OFFSET(zl)))
 
 /* Return the pointer to the last byte of a ziplist, which is, the
  * end of ziplist FF entry. */
+/**
+ * zlend字段
+ */
 #define ZIPLIST_ENTRY_END(zl)   ((zl)+intrev32ifbe(ZIPLIST_BYTES(zl))-1)
 
 /* Increment the number of items field in the ziplist header. Note that this
@@ -264,6 +288,23 @@
     if (ZIPLIST_LENGTH(zl) < UINT16_MAX) \
         ZIPLIST_LENGTH(zl) = intrev16ifbe(intrev16ifbe(ZIPLIST_LENGTH(zl))+incr); \
 }
+
+/**
+ * 压缩列表组成部分：
+ * <zlbytes> <zltail> <zllen> <entry> <entry> ... <entry> <zlend>
+ * - zlbytes：记录整个压缩列表占用的内存字节数，4字节
+ * - zltail：记录尾节点相对于压缩列表起始地址的偏移量，4字节
+ * - zllen：记录压缩列表包含的节点数量，2字节，如果超过65535个元素，需要遍历整个压缩列表才能获取到元素个数
+ * - entry：压缩列表中包含的节点，可以是字节数组或整数，节点长度由节点保存的内容决定
+ * - zlend：标记压缩列表的结尾，1个字节，固定值：0xFF
+ *
+ * 压缩列表节点的组成：
+ * <previous_entry_length> <encoding> <content>
+ * - previous_entry_length：记录前一个节点的长度，如果前一节点长度小于254字节，则previous_entry_length属性
+ *   长度为1字节；如果前一节点长度大于等于254字节，则previous_entry_length属性长度为5字节，其中第1字节为0XFE，
+ *   后4个字节保存前一节点长度
+ * - encoding：
+ */
 
 /* We use this function to receive information about a ziplist entry.
  * Note that this is not how the data is actually encoded, is just what we
