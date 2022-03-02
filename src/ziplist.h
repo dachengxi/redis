@@ -34,6 +34,10 @@
 #define ZIPLIST_HEAD 0
 #define ZIPLIST_TAIL 1
 
+/**
+ * 创建压缩列表
+ * @return
+ */
 unsigned char *ziplistNew(void);
 unsigned char *ziplistMerge(unsigned char **first, unsigned char **second);
 unsigned char *ziplistPush(unsigned char *zl, unsigned char *s, unsigned int slen, int where);
@@ -41,6 +45,14 @@ unsigned char *ziplistIndex(unsigned char *zl, int index);
 unsigned char *ziplistNext(unsigned char *zl, unsigned char *p);
 unsigned char *ziplistPrev(unsigned char *zl, unsigned char *p);
 unsigned int ziplistGet(unsigned char *p, unsigned char **sval, unsigned int *slen, long long *lval);
+/**
+ * 压缩列表插入元素
+ * @param zl
+ * @param p
+ * @param s
+ * @param slen
+ * @return
+ */
 unsigned char *ziplistInsert(unsigned char *zl, unsigned char *p, unsigned char *s, unsigned int slen);
 unsigned char *ziplistDelete(unsigned char *zl, unsigned char **p);
 unsigned char *ziplistDeleteRange(unsigned char *zl, int index, unsigned int num);
