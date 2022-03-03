@@ -37,11 +37,25 @@
 
 /* Note that these encodings are ordered, so:
  * INTSET_ENC_INT16 < INTSET_ENC_INT32 < INTSET_ENC_INT64. */
+/**
+ * 整数集合编码类型：2个字节
+ */
 #define INTSET_ENC_INT16 (sizeof(int16_t))
+/**
+ * 整数集合编码类型：4个字节
+ */
 #define INTSET_ENC_INT32 (sizeof(int32_t))
+/**
+ * 整数集合编码类型：8个字节
+ */
 #define INTSET_ENC_INT64 (sizeof(int64_t))
 
 /* Return the required encoding for the provided value. */
+/**
+ * 获取编码类型
+ * @param v
+ * @return
+ */
 static uint8_t _intsetValueEncoding(int64_t v) {
     if (v < INT32_MIN || v > INT32_MAX)
         return INTSET_ENC_INT64;
@@ -112,6 +126,13 @@ static intset *intsetResize(intset *is, uint32_t len) {
  * sets "pos" to the position of the value within the intset. Return 0 when
  * the value is not present in the intset and sets "pos" to the position
  * where "value" can be inserted. */
+/**
+ * 查找元素，整数集合是有序的，从小到大排列，查找使用二分查找
+ * @param is
+ * @param value
+ * @param pos 记录插入的位置
+ * @return
+ */
 static uint8_t intsetSearch(intset *is, int64_t value, uint32_t *pos) {
     int min = 0, max = intrev32ifbe(is->length)-1, mid = -1;
     int64_t cur = -1;
@@ -154,6 +175,12 @@ static uint8_t intsetSearch(intset *is, int64_t value, uint32_t *pos) {
 }
 
 /* Upgrades the intset to a larger encoding and inserts the given integer. */
+/**
+ * 升级后添加元素
+ * @param is
+ * @param value
+ * @return
+ */
 static intset *intsetUpgradeAndAdd(intset *is, int64_t value) {
     uint8_t curenc = intrev32ifbe(is->encoding);
     uint8_t newenc = _intsetValueEncoding(value);
@@ -201,7 +228,15 @@ static void intsetMoveTail(intset *is, uint32_t from, uint32_t to) {
 }
 
 /* Insert an integer in the intset */
+/**
+ * 添加元素
+ * @param is
+ * @param value
+ * @param success
+ * @return
+ */
 intset *intsetAdd(intset *is, int64_t value, uint8_t *success) {
+    // 获取编码
     uint8_t valenc = _intsetValueEncoding(value);
     uint32_t pos;
     if (success) *success = 1;
@@ -209,33 +244,49 @@ intset *intsetAdd(intset *is, int64_t value, uint8_t *success) {
     /* Upgrade encoding if necessary. If we need to upgrade, we know that
      * this value should be either appended (if > 0) or prepended (if < 0),
      * because it lies outside the range of existing values. */
+    // 要添加的元素的编码比当前整数集合的编码大，则整数集合需要升级
     if (valenc > intrev32ifbe(is->encoding)) {
         /* This always succeeds, so we don't need to curry *success. */
+        // 升级后添加
         return intsetUpgradeAndAdd(is,value);
     } else {
         /* Abort if the value is already present in the set.
          * This call will populate "pos" with the right position to insert
          * the value when it cannot be found. */
+        // 查找元素是否存在，如果已经存在则直接返回
         if (intsetSearch(is,value,&pos)) {
             if (success) *success = 0;
             return is;
         }
 
+        // 如果元素不存在，则进行添加，先将整数集合扩容
         is = intsetResize(is,intrev32ifbe(is->length)+1);
+        // 如果插入的元素在中间，则先将数组中元素往后面移动，给要插入的元素腾出位置
         if (pos < intrev32ifbe(is->length)) intsetMoveTail(is,pos,pos+1);
     }
 
+    // 将元素插入到数组指定位置
     _intsetSet(is,pos,value);
+    // 整数集合长度加1
     is->length = intrev32ifbe(intrev32ifbe(is->length)+1);
     return is;
 }
 
 /* Delete integer from intset */
+/**
+ * 删除元素
+ * @param is
+ * @param value
+ * @param success
+ * @return
+ */
 intset *intsetRemove(intset *is, int64_t value, int *success) {
+    // 获得编码
     uint8_t valenc = _intsetValueEncoding(value);
     uint32_t pos;
     if (success) *success = 0;
 
+    // 待删除元素的编码必须小于等于整数集合的编码，然后查找要删除的元素
     if (valenc <= intrev32ifbe(is->encoding) && intsetSearch(is,value,&pos)) {
         uint32_t len = intrev32ifbe(is->length);
 
@@ -243,16 +294,27 @@ intset *intsetRemove(intset *is, int64_t value, int *success) {
         if (success) *success = 1;
 
         /* Overwrite value with tail and update length */
+        // 如果待删除元素在中间，则调用intsetMoveTail覆盖掉元素；如果在末尾，则收缩内存后直接丢弃
         if (pos < (len-1)) intsetMoveTail(is,pos+1,pos);
+        // 重新调整大小
         is = intsetResize(is,len-1);
+        // 长度减1
         is->length = intrev32ifbe(len-1);
     }
     return is;
 }
 
 /* Determine whether a value belongs to this set */
+/**
+ * 查询元素
+ * @param is
+ * @param value
+ * @return
+ */
 uint8_t intsetFind(intset *is, int64_t value) {
+    // 获取编码类型
     uint8_t valenc = _intsetValueEncoding(value);
+    // 要查找的值的编码类型必须小于等于整数集合的编码类型；intsetSearch查找元素
     return valenc <= intrev32ifbe(is->encoding) && intsetSearch(is,value,NULL);
 }
 

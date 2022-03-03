@@ -32,15 +32,41 @@
 #define __INTSET_H
 #include <stdint.h>
 
+/**
+ * 整数集合，有序，存储整形数据
+ */
 typedef struct intset {
+    // 编码类型
     uint32_t encoding;
+    // 元素个数
     uint32_t length;
+    // 存储数据，根据encoding字段来决定用几个字节表示一个元素
     int8_t contents[];
 } intset;
 
 intset *intsetNew(void);
+/**
+ * 添加元素
+ * @param is
+ * @param value
+ * @param success
+ * @return
+ */
 intset *intsetAdd(intset *is, int64_t value, uint8_t *success);
+/**
+ * 删除元素
+ * @param is
+ * @param value
+ * @param success
+ * @return
+ */
 intset *intsetRemove(intset *is, int64_t value, int *success);
+/**
+ * 查询元素
+ * @param is
+ * @param value
+ * @return
+ */
 uint8_t intsetFind(intset *is, int64_t value);
 int64_t intsetRandom(intset *is);
 uint8_t intsetGet(intset *is, uint32_t pos, int64_t *value);
