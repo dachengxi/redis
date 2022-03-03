@@ -57,7 +57,7 @@ typedef struct dictEntry {
         int64_t s64;
         double d;
     } v;
-    // 指向下一个哈希表节点的指针，用来解决冲突（链地址法）
+    // 指向下一个哈希表节点的指针，用来解决冲突（链地址法），头插法
     struct dictEntry *next;
 } dictEntry;
 
@@ -83,18 +83,15 @@ typedef struct dictType {
  * implement incremental rehashing, for the old to the new table. */
 /**
  * 哈希表
- *
  */
 typedef struct dictht {
-    /**
-     * 哈希表数组，每个dictEntry都保存着一个键值对
-     */
+    // 哈希表数组，每个dictEntry都保存着一个键值对
     dictEntry **table;
     // 记录了哈希表的大小
     unsigned long size;
-    // 值总是等于size-1，和哈希值一起决定一个键应该北方到table数组的哪个索引上
+    // 掩码，值总是等于size-1，和哈希值一起决定一个键应该被放到table数组的哪个索引上
     unsigned long sizemask;
-    // 该哈希表已有节点的数量
+    // 该哈希表已有节点的数量，包含next单链表的数据
     unsigned long used;
 } dictht;
 
@@ -105,7 +102,7 @@ typedef struct dictht {
 typedef struct dict {
     /**
      * 类型特定函数
-     * 每隔dictType结构保存了一些用于操作特定类型
+     * 每个dictType结构保存了一些用于操作特定类型
      * 键值对的函数，可给字典设置不同类型的特定函数
      */
     dictType *type;
@@ -120,9 +117,11 @@ typedef struct dict {
      */
     dictht ht[2];
     /**
-     * 记录了rehash的进度，如果没有在进行rehash的话，值为-1
+     * 记录了rehash的进度，默认-1，表示没有在进行rehash；不为-1表示正在进行rehash，
+     * rehashidx的值表示ht[0]的rehash操作进行到了哪个索引值
      */
     long rehashidx; /* rehashing not in progress if rehashidx == -1 */
+    // 当前运行的迭代器数目
     unsigned long iterators; /* number of iterators currently running */
 } dict;
 
@@ -130,12 +129,20 @@ typedef struct dict {
  * dictAdd, dictFind, and other functions against the dictionary even while
  * iterating. Otherwise it is a non safe iterator, and only dictNext()
  * should be called while iterating. */
+/**
+ * 迭代器
+ */
 typedef struct dictIterator {
+    // 迭代的字典
     dict *d;
+    // 当前迭代到的索引
     long index;
+    // table是当前正在迭代的哈希表，safe表示当前创建的是否为安全迭代器
     int table, safe;
+    // entry表示当前节点，nextEntry表示当前节点的链表下一个节点
     dictEntry *entry, *nextEntry;
     /* unsafe iterator fingerprint for misuse detection. */
+    // 字典的指纹，字典未发生变化的时候，该值不会变化
     long long fingerprint;
 } dictIterator;
 
@@ -182,6 +189,9 @@ typedef void (dictScanBucketFunction)(void *privdata, dictEntry **bucketref);
         (d)->type->keyCompare((d)->privdata, key1, key2) : \
         (key1) == (key2))
 
+/**
+ * 获取键的哈希值
+ */
 #define dictHashKey(d, key) (d)->type->hashFunction(key)
 #define dictGetKey(he) ((he)->key)
 #define dictGetVal(he) ((he)->v.val)
@@ -190,25 +200,85 @@ typedef void (dictScanBucketFunction)(void *privdata, dictEntry **bucketref);
 #define dictGetDoubleVal(he) ((he)->v.d)
 #define dictSlots(d) ((d)->ht[0].size+(d)->ht[1].size)
 #define dictSize(d) ((d)->ht[0].used+(d)->ht[1].used)
+/**
+ * 字典是否正在rehash，直接判断rehashidx是否等于-1
+ */
 #define dictIsRehashing(d) ((d)->rehashidx != -1)
 
 /* API */
+/**
+ * 创建字典
+ * @param type
+ * @param privDataPtr
+ * @return
+ */
 dict *dictCreate(dictType *type, void *privDataPtr);
+/**
+ * 字典扩容
+ * @param d
+ * @param size
+ * @return
+ */
 int dictExpand(dict *d, unsigned long size);
+/**
+ * 添加键值对
+ * @param d
+ * @param key
+ * @param val
+ * @return
+ */
 int dictAdd(dict *d, void *key, void *val);
+/**
+ * 添加键
+ * @param d
+ * @param key
+ * @param existing
+ * @return
+ */
 dictEntry *dictAddRaw(dict *d, void *key, dictEntry **existing);
 dictEntry *dictAddOrFind(dict *d, void *key);
 int dictReplace(dict *d, void *key, void *val);
+/**
+ * 删除元素
+ * @param d
+ * @param key
+ * @return
+ */
 int dictDelete(dict *d, const void *key);
 dictEntry *dictUnlink(dict *ht, const void *key);
 void dictFreeUnlinkedEntry(dict *d, dictEntry *he);
 void dictRelease(dict *d);
+/**
+ * 根据键查询元素
+ * @param d
+ * @param key
+ * @return
+ */
 dictEntry * dictFind(dict *d, const void *key);
 void *dictFetchValue(dict *d, const void *key);
 int dictResize(dict *d);
+/**
+ * 初始化迭代器，普通迭代器只遍历数据
+ * @param d
+ * @return
+ */
 dictIterator *dictGetIterator(dict *d);
+/**
+ * 初始化安全的迭代器，安全迭代器遍历的同时可删除数据
+ * @param d
+ * @return
+ */
 dictIterator *dictGetSafeIterator(dict *d);
+/**
+ * 通过迭代器获取下一个节点
+ * @param iter
+ * @return
+ */
 dictEntry *dictNext(dictIterator *iter);
+/**
+ * 释放迭代器
+ * @param iter
+ */
 void dictReleaseIterator(dictIterator *iter);
 dictEntry *dictGetRandomKey(dict *d);
 unsigned int dictGetSomeKeys(dict *d, dictEntry **des, unsigned int count);
@@ -218,6 +288,12 @@ uint64_t dictGenCaseHashFunction(const unsigned char *buf, int len);
 void dictEmpty(dict *d, void(callback)(void*));
 void dictEnableResize(void);
 void dictDisableResize(void);
+/**
+ * rehash操作
+ * @param d
+ * @param n
+ * @return
+ */
 int dictRehash(dict *d, int n);
 int dictRehashMilliseconds(dict *d, int ms);
 void dictSetHashFunctionSeed(uint8_t *seed);
