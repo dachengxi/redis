@@ -41,14 +41,25 @@
  * recompress: 1 bit, bool, true if node is temporarry decompressed for usage.
  * attempted_compress: 1 bit, boolean, used for verifying during testing.
  * extra: 10 bits, free for future use; pads out the remainder of 32 bits */
+/**
+ * quicklist的节点
+ */
 typedef struct quicklistNode {
+    // 前驱节点
     struct quicklistNode *prev;
+    // 后继节点
     struct quicklistNode *next;
+    // 该节点对应的ziplist
     unsigned char *zl;
+    // ziplist的大小
     unsigned int sz;             /* ziplist size in bytes */
+    // ziplist中元素的个数
     unsigned int count : 16;     /* count of items in ziplist */
+    // 编码方式，1是ziplist原生编码 2是使用LZF压缩
     unsigned int encoding : 2;   /* RAW==1 or LZF==2 */
+    // 表示zl指向的容器类型，1是none，2是使用ziplist存储数据
     unsigned int container : 2;  /* NONE==1 or ZIPLIST==2 */
+    // 表示这个节点之前是否是压缩节点，如果是则使用压缩节点前需要先进行解压缩
     unsigned int recompress : 1; /* was this node previous compressed? */
     unsigned int attempted_compress : 1; /* node can't compress; too small */
     unsigned int extra : 10; /* more bits to steal for future usage */
@@ -70,12 +81,29 @@ typedef struct quicklistLZF {
  * 'compress' is: -1 if compression disabled, otherwise it's the number
  *                of quicklistNodes to leave uncompressed at ends of quicklist.
  * 'fill' is the user-requested (or default) fill factor. */
+/**
+ * quicklist是一个由ziplist充当节点的双向链表
+ */
 typedef struct quicklist {
+    // 头节点
     quicklistNode *head;
+    // 尾节点
     quicklistNode *tail;
+    // quicklist中元素的总数
     unsigned long count;        /* total count of all entries in all ziplists */
+    // quicklist中quicklistNode的总数
     unsigned long len;          /* number of quicklistNodes */
+    /**
+     * fill表示quicklistNode中ziplist的长度，fill不同值代表不同含义：
+     * - fill为正数，表示每个ziplist最多含有的数据项数
+     * - fill为-1，表示ziplist节点最大为4KB
+     * - fill为-2，表示ziplist节点最大为8KB
+     * - fill为-3，表示ziplist节点最大为16KB
+     * - fill为-4，表示ziplist节点最大为32KB
+     * - fill为-5，表示ziplist节点最大为64KB
+     */
     int fill : 16;              /* fill factor for individual nodes */
+    // 表示两端各有compress个quicklistNode节点不压缩
     unsigned int compress : 16; /* depth of end nodes not to compress;0=off */
 } quicklist;
 
