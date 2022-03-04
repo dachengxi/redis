@@ -62,6 +62,7 @@ typedef struct quicklistNode {
     // 表示这个节点之前是否是压缩节点，如果是则使用压缩节点前需要先进行解压缩
     unsigned int recompress : 1; /* was this node previous compressed? */
     unsigned int attempted_compress : 1; /* node can't compress; too small */
+    // 预留字段
     unsigned int extra : 10; /* more bits to steal for future usage */
 } quicklistNode;
 
@@ -107,21 +108,39 @@ typedef struct quicklist {
     unsigned int compress : 16; /* depth of end nodes not to compress;0=off */
 } quicklist;
 
+/**
+ * 遍历quicklist的迭代器
+ */
 typedef struct quicklistIter {
+    // 所属的quicklist
     const quicklist *quicklist;
+    // 当前元素所在的quicklistNode
     quicklistNode *current;
+    // 当前元素所在的ziplist
     unsigned char *zi;
+    // 节点在ziplist中的偏移量
     long offset; /* offset in current ziplist */
+    // 迭代器的方向
     int direction;
 } quicklistIter;
 
+/**
+ * 表示quicklistNode中ziplist中的节点
+ */
 typedef struct quicklistEntry {
+    // 当前元素所属的quicklist
     const quicklist *quicklist;
+    // 当前元素所在的quicklistNode
     quicklistNode *node;
+    // 当前元素所在的ziplist
     unsigned char *zi;
+    // 该节点的内容
     unsigned char *value;
+    // 该节点的整形值
     long long longval;
+    // 该节点大小
     unsigned int sz;
+    // 该节点相对于整个ziplist的偏移量
     int offset;
 } quicklistEntry;
 
