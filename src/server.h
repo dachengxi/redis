@@ -497,10 +497,25 @@ typedef long long ustime_t; /* microsecond time type. */
 /* A redis object, that is a type able to hold a string / list / set */
 
 /* The actual Redis Object */
+/**
+ * 字符串对象
+ */
 #define OBJ_STRING 0    /* String object. */
+/**
+ * 列表对象
+ */
 #define OBJ_LIST 1      /* List object. */
+/**
+ * 集合对象
+ */
 #define OBJ_SET 2       /* Set object. */
+/**
+ * 有序集合对象
+ */
 #define OBJ_ZSET 3      /* Sorted set object. */
+/**
+ * 散列表对象
+ */
 #define OBJ_HASH 4      /* Hash object. */
 
 /* The "module" object type is a special one that signals that the object
@@ -531,6 +546,9 @@ struct RedisModule;
 struct RedisModuleIO;
 struct RedisModuleDigest;
 struct RedisModuleCtx;
+/**
+ * redis对象
+ */
 struct redisObject;
 
 /* Each module type implementation should export a set of methods in order
@@ -628,16 +646,49 @@ typedef struct RedisModuleDigest {
 /* Objects encoding. Some kind of objects like Strings and Hashes can be
  * internally represented in multiple ways. The 'encoding' field of the object
  * is set to one of this fields for this object. */
+/**
+ * 简单动态字符串sds编码，该类型对象可存储：字符串
+ */
 #define OBJ_ENCODING_RAW 0     /* Raw representation */
+/**
+ * 整数编码，该类型对象可存储：字符串
+ */
 #define OBJ_ENCODING_INT 1     /* Encoded as integer */
+/**
+ * 字典，该类型对象可存储：集合，散列表，有序集合
+ */
 #define OBJ_ENCODING_HT 2      /* Encoded as hash table */
+/**
+ * 未使用
+ */
 #define OBJ_ENCODING_ZIPMAP 3  /* Encoded as zipmap */
+/**
+ * 双端链表，不再使用
+ */
 #define OBJ_ENCODING_LINKEDLIST 4 /* No longer used: old list encoding. */
+/**
+ * 压缩列表，该类型对象可存储：散列表、有序集合
+ */
 #define OBJ_ENCODING_ZIPLIST 5 /* Encoded as ziplist */
+/**
+ * 整数集合，该类型对象可存储：集合
+ */
 #define OBJ_ENCODING_INTSET 6  /* Encoded as intset */
+/**
+ * 跳表，该类型对象可存储：有序集合
+ */
 #define OBJ_ENCODING_SKIPLIST 7  /* Encoded as skiplist */
+/**
+ * embstr编码的sds,该类型对象可存储：字符串
+ */
 #define OBJ_ENCODING_EMBSTR 8  /* Embedded sds string encoding */
+/**
+ * 快速链表，该类型对象可存储：列表
+ */
 #define OBJ_ENCODING_QUICKLIST 9 /* Encoded as linked list of ziplists */
+/**
+ * stream，该类型对象可存储：stream
+ */
 #define OBJ_ENCODING_STREAM 10 /* Encoded as a radix tree of listpacks */
 
 #define LRU_BITS 24
@@ -645,13 +696,23 @@ typedef struct RedisModuleDigest {
 #define LRU_CLOCK_RESOLUTION 1000 /* LRU clock resolution in ms */
 
 #define OBJ_SHARED_REFCOUNT INT_MAX
+/**
+ * redis对象
+ */
 typedef struct redisObject {
+    /**
+     * 对象类型：字符串、列表、集合、有序集合、散列表
+     */
     unsigned type:4;
+    /**
+     * 对象的编码：底层存储采用的数据结构
+     */
     unsigned encoding:4;
     unsigned lru:LRU_BITS; /* LRU time (relative to global lru_clock) or
                             * LFU data (least significant 8 bits frequency
                             * and most significant 16 bits access time). */
     int refcount;
+    // 指向底层实现数据结构的指针
     void *ptr;
 } robj;
 
