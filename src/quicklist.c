@@ -91,14 +91,24 @@ static const size_t optimization_level[] = {4096, 8192, 16384, 32768, 65536};
 
 /* Create a new quicklist.
  * Free with quicklistRelease(). */
+/**
+ * 创建quicklist
+ * @return
+ */
 quicklist *quicklistCreate(void) {
     struct quicklist *quicklist;
 
+    // 分配内存
     quicklist = zmalloc(sizeof(*quicklist));
+    // 头节点和尾节点都初始化为NULL
     quicklist->head = quicklist->tail = NULL;
+    // 长度初始化为0
     quicklist->len = 0;
+    // 元素个数初始化为0
     quicklist->count = 0;
+    // 不对节点进行压缩
     quicklist->compress = 0;
+    // fill为-2，表示ziplist节点最大为8KB
     quicklist->fill = -2;
     return quicklist;
 }

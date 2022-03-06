@@ -162,6 +162,10 @@ typedef struct quicklistEntry {
     ((node)->encoding == QUICKLIST_NODE_ENCODING_LZF)
 
 /* Prototypes */
+/**
+ * 创建quicklist
+ * @return
+ */
 quicklist *quicklistCreate(void);
 quicklist *quicklistNew(int fill, int compress);
 void quicklistSetCompressDepth(quicklist *quicklist, int depth);
