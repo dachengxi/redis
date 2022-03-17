@@ -77,9 +77,22 @@ typedef void aeBeforeSleepProc(struct aeEventLoop *eventLoop);
  * 来完成一系列网络通信操作。
  */
 typedef struct aeFileEvent {
+    /**
+     * 监控的文件事件类型
+     * AE_READABLE可读事件、AE_WRITEABLE可写事件
+     */
     int mask; /* one of AE_(READABLE|WRITABLE|BARRIER) */
+    /**
+     * 函数指针，指向读事件处理函数
+     */
     aeFileProc *rfileProc;
+    /**
+     * 函数指针，指向写事件处理函数
+     */
     aeFileProc *wfileProc;
+    /**
+     * 客户端对象
+     */
     void *clientData;
 } aeFileEvent;
 
@@ -120,29 +133,58 @@ typedef struct aeTimeEvent {
  * 触发的事件
  */
 typedef struct aeFiredEvent {
+    /**
+     * 发生事件的socket文件描述符
+     */
     int fd;
+    /**
+     * 发生的事件类型，AE_READABLE可读事件、AE_WRITEABLE可写事件
+     */
     int mask;
 } aeFiredEvent;
 
-/* State of an event based program
- * 事件驱动循环，保存所有正在监听的事件以及所有已激活的事件
+/* State of an event based program */
+/**
+ * redis服务器是事件驱动模式，事件分为两种：
+ * - 文件事件，socket的读写事件
+ * - 时间事件，定时任务相关的事件
+ *
+ * aeEventLoop来封装事件
  */
 typedef struct aeEventLoop {
     int maxfd;   /* highest file descriptor currently registered */
     int setsize; /* max number of file descriptors tracked */
     long long timeEventNextId;
     time_t lastTime;     /* Used to detect system clock skew */
-    // 文件事件
-    aeFileEvent *events; /* Registered events 注册的事件，被EventLoop监听 */
-    // 被触发的事件
-    aeFiredEvent *fired; /* Fired events 有读写操作需要执行的事件，就绪事件*/
-    // 时间事件
+    /**
+     * 文件事件数组，存储已经注册的（需要监控的）文件事件
+     */
+    aeFileEvent *events; /* Registered events */
+    /**
+     * 存储被触发的文件事件
+     */
+    aeFiredEvent *fired; /* Fired events */
+    /**
+     * 时间事件链表的头节点
+     *
+     * redis有多个定时任务，所以会有多个时间事件，多个时间事件形成链表
+     */
     aeTimeEvent *timeEventHead;
-    // 事件循环结束标识
+    /**
+     * 标识事件循环是否结束
+     */
     int stop;
-    // 不同的IO多路复用技术，需要不同的数据
+    /**
+     * redis底层可以使用4中IO多路复用模型，apidata是对四种模型的统一封装
+     */
     void *apidata; /* This is used for polling API specific data */
+    /**
+     * redis服务器需要阻塞等待文件事件的发生，进程阻塞前会调用beforesleep函数
+     */
     aeBeforeSleepProc *beforesleep;
+    /**
+     * redis服务器需要阻塞等待文件事件的发生，进程被唤醒后会调用aftersleep函数
+     */
     aeBeforeSleepProc *aftersleep;
 } aeEventLoop;
 

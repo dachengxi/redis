@@ -708,11 +708,22 @@ typedef struct redisObject {
      * 对象的编码：底层存储采用的数据结构
      */
     unsigned encoding:4;
+    /**
+     * 缓存淘汰测策略，字段长度24位。
+     * - LRU，数据最近被访问过，将来被访问的几率也高，此时lru字段存储对象的访问时间
+     * - LFU，如果数据过去被多次访问，那么将来被访问的频率也会更高，此时lru字段存储的是上次访问时间和访问次数。
+     *   lru低8位存储对象的访问次数，高16位存储对象的上次访问时间，以分钟为单位
+     */
     unsigned lru:LRU_BITS; /* LRU time (relative to global lru_clock) or
                             * LFU data (least significant 8 bits frequency
                             * and most significant 16 bits access time). */
+    /**
+     * 引用计数，用来实现对象的共享
+     */
     int refcount;
-    // 指向底层实现数据结构的指针
+    /**
+     * 指向底层实现数据结构的指针，当robj存储的数据可以用long类型表示时，ptr字段直接存储该数据。
+     */
     void *ptr;
 } robj;
 
@@ -731,8 +742,13 @@ struct evictionPoolEntry; /* Defined in evict.c */
 
 /* This structure is used in order to represent the output buffer of a client,
  * which is actually a linked list of blocks like that, that is: client->reply. */
+/**
+ * 客户端输出缓冲区链表的节点
+ */
 typedef struct clientReplyBlock {
+    // size表示缓冲区空间大小，used表示缓冲区已使用空间大小
     size_t size, used;
+    // 缓冲区
     char buf[];
 } clientReplyBlock;
 
@@ -740,7 +756,7 @@ typedef struct clientReplyBlock {
  * by integers from 0 (the default database) up to the max configured
  * database. The database number is the 'id' field in the structure. */
 /**
- * redisDb代表redis服务器中的一个数据库
+ * redisDb代表redis服务器中的一个数据库，redis默认情况下有16个数据库，编号为0～15
  */
 typedef struct redisDb {
     /**
@@ -784,10 +800,25 @@ typedef struct redisDb {
      * Redis使用惰性删除和定期删除两种策略，通过两种策略配合，可以在避免浪费CPU时间和避免浪费内存间取得平衡。
      */
     dict *expires;              /* Timeout of keys with a timeout set */
+    /**
+     * 使用BLPOP阻塞获取元素时，如果链表为空，则会阻塞客户端，并将键记录在blocking_keys字段中
+     */
     dict *blocking_keys;        /* Keys with clients waiting for data (BLPOP)*/
+    /**
+     * 当使用PUSH命令向列表中添加元素时，会从blocking_keys中查找对应的键，如果键存在，说明有客户端正在阻塞等待获取
+     * 数据，于是将此键记录到ready_keys中，以便后续响应正在阻塞的客户端。
+     */
     dict *ready_keys;           /* Blocked keys that received a PUSH */
+    /**
+     * redis支持事务，multi命令开启事务，exec执行事务。Redis使用乐观锁来实现事务，在开启事务的时候同时使用watch key
+     * 命令来监控关心的键，这些键存储在watched_keys中，这个字典的key是键，value是客户端对象。当redis服务器接收到写命令
+     * 时，会在watched_keys中查找该键，如果找到，说明有客户端正在监控此键，同时标记客户端对象为dirty，等到redis服务器
+     * 执行exec命令的时候，如果客户端是dirty的，则会拒绝执行事务。
+     */
     dict *watched_keys;         /* WATCHED keys for MULTI/EXEC CAS */
+    // 数据的序号
     int id;                     /* Database ID */
+    // 存储数据库对象的平均TTL，用于统计
     long long avg_ttl;          /* Average TTL, just for stats */
     list *defrag_later;         /* List of key names to attempt to defrag one by one, gradually. */
 } redisDb;
@@ -858,7 +889,7 @@ typedef struct readyList {
 /* With multiplexing we need to take per-client state.
  * Clients are taken in a linked list. */
 /**
- * client代表客户端状态
+ * client代表客户端状态，用来存储客户端连接的信息。
  *
  * 客户端分为两种：普通客户端和伪客户端（执行lua脚本中redis命令的伪客户端和执行AOF包含命令的伪客户端）
  *
@@ -875,6 +906,7 @@ typedef struct readyList {
  * 服务器在载入AOF文件时会创建用于执行AOF文件包含的redis命令的伪客户端，并在载入完成后关闭这个伪客户端。
  */
 typedef struct client {
+    // 客户端的ID
     uint64_t id;            /* Client incremental unique ID. */
     /**
      * 客户端套接字描述符
@@ -887,19 +919,17 @@ typedef struct client {
      */
     int fd;                 /* Client socket. */
     /**
-     * db记录了客户端当前的目标数据库
-     * 是指向redisDb结构的指针
+     * db记录了客户端当前的目标数据库，是指向redisDb结构的指针。
+     * 客户端可以使用select命令选择数据库对象
      */
     redisDb *db;            /* Pointer to currently SELECTed DB. */
     // 客户端名字
     robj *name;             /* As set by CLIENT SETNAME. */
     /**
-     * 客户端输入缓冲区
-     * 用于保存客户端发送的命令请求
-     * 输入缓冲区大小会根据输入内容动态的缩小或者扩大，但它的最大
-     * 大小不能超过1G，否则服务器将关闭这个客户端。
-     * 服务器将客户端发送的命令请求保存到客户端的输入缓冲区后，服务器
-     * 会对命令请求内容进行分析，得到命令参数和命令参数个数，分别保存在：argv和argc属性中
+     * 客户端输入缓冲区，用于保存客户端发送的命令请求。
+     * 输入缓冲区大小会根据输入内容动态的缩小或者扩大，但它的最大大小不能超过1G，否则服务器将关闭这个客户端。
+     * 服务器将客户端发送的命令请求保存到客户端的输入缓冲区后，服务器会对命令请求内容进行分析，得到命令参数和命令参数个数，
+     * 分别保存在：argv和argc属性中
      */
     sds querybuf;           /* Buffer we use to accumulate client queries. */
     size_t qb_pos;          /* The position we have read in querybuf. */
@@ -932,17 +962,22 @@ typedef struct client {
     int multibulklen;       /* Number of multi bulk arguments left to read. */
     long bulklen;           /* Length of bulk argument in multi bulk request. */
     /**
-     * 可变的输出缓冲区
+     * 可变的输出缓冲区，存储待返回给客户端的命令回复数据，链表的节点存储的值类型为clientReplyBlock
      */
     list *reply;            /* List of reply objects to send to the client. */
+    /**
+     * 表示reply输出链表中所有节点的存储空间总和
+     */
     unsigned long long reply_bytes; /* Tot bytes of objects in reply list. */
+    /**
+     * 表示已返回给客户端的字节数
+     */
     size_t sentlen;         /* Amount of bytes already sent in the current
                                buffer or object being sent. */
     // 客户端创建时间
     time_t ctime;           /* Client creation time. */
     /**
-     * 客户端与服务器最后一次进行互动的时间
-     * 可用来计算客户端的空转（idle）时间
+     * 客户端与服务器最后一次进行互动的时间，可用来计算客户端的空转（idle）时间，以此来实现客户端的超时处理
      */
     time_t lastinteraction; /* Time of the last interaction, used for timeout */
     // 记录了输出缓冲区第一次达到soft limit的时间
@@ -1005,6 +1040,9 @@ typedef struct client {
      *
      */
     int bufpos;
+    /**
+     * 输出缓冲区，存储待返回给客户端的命令回复数据
+     */
     char buf[PROTO_REPLY_CHUNK_BYTES];
 } client;
 
@@ -1071,7 +1109,7 @@ typedef struct zskiplist {
 } zskiplist;
 
 /**
- * redis有序集合
+ * redis有序集合，同时使用字典和跳表来实现
  */
 typedef struct zset {
     /**
@@ -1197,11 +1235,14 @@ struct clusterState;
 #define CHILD_INFO_TYPE_AOF 1
 
 /**
- * 表示服务器状态
+ * 表示服务器状态，存储服务器所有信息
  */
 struct redisServer {
     /* General */
     pid_t pid;                  /* Main process pid. */
+    /**
+     * 配置文件绝对路径
+     */
     char *configfile;           /* Absolute config file path, or NULL */
     char *executable;           /* Absolute executable file path. */
     char **exec_argv;           /* Executable argv vector (copy). */
@@ -1211,13 +1252,18 @@ struct redisServer {
                                    is enabled. */
     int hz;                     /* serverCron() calls frequency in hertz */
     /**
-     * db数组
-     * 数组中每一项都是一个redisDb结构，
-     * 每个redisDb代表一个数据库
+     * 数据库数组
+     * 数组中每一项都是一个redisDb结构，每个redisDb代表一个数据库
      */
     redisDb *db;
+    /**
+     * 命令字典，redis支持的所有命令都存储在这个字典中，key为名称，value为redisCommand对象
+     */
     dict *commands;             /* Command table */
     dict *orig_commands;        /* Command table before command renaming. */
+    /**
+     * el代表事件循环
+     */
     aeEventLoop *el;
     unsigned int lruclock;      /* Clock for LRU eviction */
     int shutdown_asap;          /* SHUTDOWN needed ASAP */
@@ -1241,17 +1287,36 @@ struct redisServer {
                                    client blocked on a module command needs
                                    to be processed. */
     /* Networking */
+    /**
+     * 服务器监听端口，可通过port配置，默认6379
+     */
     int port;                   /* TCP listening port */
     int tcp_backlog;            /* TCP listen() backlog */
+    /**
+     * 绑定的所有IP地址，可通过bind参数配置多个。
+     * CONFIG_BINDADDR_MAX=16，最多可绑定16个IP地址，redis默认会绑定到当前机器所有可用的IP地址
+     */
     char *bindaddr[CONFIG_BINDADDR_MAX]; /* Addresses we should bind to */
+    /**
+     * 用户配置的IP地址数量
+     */
     int bindaddr_count;         /* Number of addresses in server.bindaddr[] */
     char *unixsocket;           /* UNIX socket path */
     mode_t unixsocketperm;      /* UNIX socket permission */
+    /**
+     * IP地址对应的socket描述符
+     */
     int ipfd[CONFIG_BINDADDR_MAX]; /* TCP socket file descriptors */
+    /**
+     * IP地址描述符数量
+     */
     int ipfd_count;             /* Used slots in ipfd[] */
     int sofd;                   /* Unix socket file descriptor */
     int cfd[CONFIG_BINDADDR_MAX];/* Cluster bus listening socket */
     int cfd_count;              /* Used slots in cfd[] */
+    /**
+     * 连接到redis服务器的所有客户端
+     */
     list *clients;              /* List of active clients */
     list *clients_to_close;     /* Clients to close asynchronously */
     list *clients_pending_write; /* There is to write or install handler. */
@@ -1272,6 +1337,9 @@ struct redisServer {
     time_t loading_start_time;
     off_t loading_process_events_interval_bytes;
     /* Fast pointers to often looked up command */
+    /**
+     * 经常使用的命令，redis在服务器初始化的时候将命令缓存起来
+     */
     struct redisCommand *delCommand, *multiCommand, *lpushCommand,
                         *lpopCommand, *rpopCommand, *zpopminCommand,
                         *zpopmaxCommand, *sremCommand, *execCommand,
@@ -1323,6 +1391,10 @@ struct redisServer {
     } inst_metric[STATS_METRIC_COUNT];
     /* Configuration */
     int verbosity;                  /* Loglevel in redis.conf */
+    /**
+     * 最大空闲时间，可通过参数timeout配置。结合client对象的lastinteraction字段，当客户端没有与服务器
+     * 交互的时间超过maxidletime时，会认为客户端超时并释放该客户端连接
+     */
     int maxidletime;                /* Client timeout in seconds */
     int tcpkeepalive;               /* Set SO_KEEPALIVE if non-zero. */
     int active_expire_enabled;      /* Can be disabled for testing purposes. */
@@ -1335,8 +1407,7 @@ struct redisServer {
     unsigned long active_defrag_max_scan_fields; /* maximum number of fields of set/hash/zset/list to process from within the main dict scan */
     size_t client_max_querybuf_len; /* Limit for client query buffer length */
     /**
-     * 服务器初始化的时候，会根据dbnum个数来创建数据库
-     * dbnum属性值由配置中的database决定，默认16
+     * 数据库的数量，通过配置中的database来配置，默认16
      */
     int dbnum;                      /* Total number of configured DBs */
     int supervised;                 /* 1 if supervised, 0 otherwise. */
@@ -1589,11 +1660,29 @@ typedef struct pubsubPattern {
 
 typedef void redisCommandProc(client *c);
 typedef int *redisGetKeysProc(struct redisCommand *cmd, robj **argv, int argc, int *numkeys);
+/**
+ * redis命令结构体
+ */
 struct redisCommand {
+    /**
+     * 命令的名称
+     */
     char *name;
+    /**
+     * 命令处理函数
+     */
     redisCommandProc *proc;
+    /**
+     * 命令参数数目，用于校验命令请求格式是否正确
+     */
     int arity;
+    /**
+     * 命令标识，标识命令是读命令还是写命令
+     */
     char *sflags; /* Flags as string representation, one char per flag. */
+    /**
+     * 命令的二进制标识，服务器启动时解析sflags字段生成
+     */
     int flags;    /* The actual flags, obtained from the 'sflags' field. */
     /* Use a function to determine keys arguments in a command line.
      * Used for Redis Cluster redirect. */
@@ -1602,6 +1691,11 @@ struct redisCommand {
     int firstkey; /* The first argument that's a key (0 = no keys) */
     int lastkey;  /* The last argument that's a key */
     int keystep;  /* The step between first and last key */
+    /**
+     * microseconds表示从服务器启动到现在命令总的执行时间
+     * calls表示从服务器启动到现在命令的执行的次数，用于统计
+     * microseconds/calls即可计算出命令的平均处理时间
+     */
     long long microseconds, calls;
 };
 
