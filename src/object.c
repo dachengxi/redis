@@ -68,6 +68,7 @@ robj *createObject(int type, void *ptr) {
  */
 robj *makeObjectShared(robj *o) {
     serverAssert(o->refcount == 1);
+    // 共享对象的refcount引用计数为INT_MAX
     o->refcount = OBJ_SHARED_REFCOUNT;
     return o;
 }

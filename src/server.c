@@ -616,12 +616,19 @@ dictType zsetDictType = {
 };
 
 /* Db->dict, keys are sds strings, vals are Redis objects. */
+/**
+ * 数据库字典类型
+ */
 dictType dbDictType = {
+        // 键散列函数
     dictSdsHash,                /* hash function */
     NULL,                       /* key dup */
     NULL,                       /* val dup */
+    // 键比较函数
     dictSdsKeyCompare,          /* key compare */
+    // 键析构函数
     dictSdsDestructor,          /* key destructor */
+    // 值析构函数
     dictObjectDestructor   /* val destructor */
 };
 
@@ -1009,11 +1016,15 @@ void clientsCron(void) {
 /* This function handles 'background' operations we are required to do
  * incrementally in Redis databases, such as active key expiring, resizing,
  * rehashing. */
+/**
+ * 数据库处理的定时任务
+ */
 void databasesCron(void) {
     /* Expire keys by random sampling. Not required for slaves
      * as master will synthesize DELs for us. */
     if (server.active_expire_enabled) {
         if (server.masterhost == NULL) {
+            // 过期键删除
             activeExpireCycle(ACTIVE_EXPIRE_CYCLE_SLOW);
         } else {
             expireSlaveKeys();
@@ -1110,7 +1121,14 @@ void updateCachedTime(int update_daylight_info) {
  * so in order to throttle execution of things we want to do less frequently
  * a macro is used: run_with_period(milliseconds) { .... }
  */
-
+/**
+ * serverCron函数实现redis的所有定时任务的周期执行。serverCron函数执行时间不能过长，否则会导致服务器不能及时响应
+ * 客户端的命令请求。
+ * @param eventLoop
+ * @param id
+ * @param clientData
+ * @return
+ */
 int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
     int j;
     UNUSED(eventLoop);
@@ -1139,6 +1157,7 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
         }
     }
 
+    // 100毫秒周期执行
     run_with_period(100) {
         trackInstantaneousMetric(STATS_METRIC_COMMAND,server.stat_numcommands);
         trackInstantaneousMetric(STATS_METRIC_NET_INPUT,
@@ -1165,6 +1184,7 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
     if (zmalloc_used_memory() > server.stat_peak_memory)
         server.stat_peak_memory = zmalloc_used_memory();
 
+    // 100毫秒周期执行
     run_with_period(100) {
         /* Sample the RSS and other metrics here since this is a relatively slow call.
          * We must sample the zmalloc_used at the same time we take the rss, otherwise
@@ -1202,6 +1222,7 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
     }
 
     /* Show some info about non-empty databases */
+    // 5000毫秒周期执行
     run_with_period(5000) {
         for (j = 0; j < server.dbnum; j++) {
             long long size, used, vkeys;
@@ -1218,6 +1239,7 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
 
     /* Show information about connected clients */
     if (!server.sentinel_mode) {
+        // 5000毫秒周期执行
         run_with_period(5000) {
             serverLog(LL_VERBOSE,
                 "%lu clients connected (%lu replicas), %zu bytes in use",
@@ -1228,9 +1250,11 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
     }
 
     /* We need to do a few operations on clients asynchronously. */
+    // 清除超时客户端连接
     clientsCron();
 
     /* Handle background operations on Redis databases. */
+    // 数据库处理
     databasesCron();
 
     /* Start a scheduled AOF rewrite if this was requested by the user while
@@ -1373,6 +1397,7 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
             server.rdb_bgsave_scheduled = 0;
     }
 
+    // 记录serverCron函数的执行次数
     server.cronloops++;
     return 1000/server.hz;
 }
@@ -1380,6 +1405,12 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
 /* This function gets called every time Redis is entering the
  * main loop of the event driven library, that is, before to sleep
  * for ready file descriptors. */
+/**
+ * 每次事件循环开始，也就是redis阻塞等待文件事件之前都会执行beforesleep函数。
+ * beforesleep函数执行一些不是很费时的操作，如：集群相关操作，过期键删除操作（快速过期键删除），
+ * 向客户端返回命令回复等。
+ * @param eventLoop
+ */
 void beforeSleep(struct aeEventLoop *eventLoop) {
     UNUSED(eventLoop);
 
@@ -1391,7 +1422,12 @@ void beforeSleep(struct aeEventLoop *eventLoop) {
 
     /* Run a fast expire cycle (the called function will return
      * ASAP if a fast cycle is not needed). */
+    /**
+     * active_expire_enabled表示是否开启周期性删除过期键策略
+     * masterhost存储master服务器的域名，如果为NULL说明服务器不是slave服务器
+     */
     if (server.active_expire_enabled && server.masterhost == NULL)
+        // 快速过期键删除
         activeExpireCycle(ACTIVE_EXPIRE_CYCLE_FAST);
 
     /* Send all the slaves an ACK request if at least one client blocked
@@ -1444,9 +1480,19 @@ void afterSleep(struct aeEventLoop *eventLoop) {
 
 /* =========================== Server initialization ======================== */
 
+/**
+ * 创建共享对象
+ *
+ * 对象是可共享的，robj的refcount字段存储当前对象的引用计数，只有当对象存储的是0~10000的整数时，
+ * 对象才可被共享。这些共享整数对象的引用计数被初始化为INT_MAX，保证不会被释放。
+ *
+ * 执行命令的时候会返回一些字符串的回复，这些字符串也是在这里初始化，并且不会释放这些对象，所有共享
+ * 对象存储在全局结构体变量shared中
+ */
 void createSharedObjects(void) {
     int j;
 
+    // 创建命令回复字符串对象
     shared.crlf = createObject(OBJ_STRING,sdsnew("\r\n"));
     shared.ok = createObject(OBJ_STRING,sdsnew("+OK\r\n"));
     shared.err = createObject(OBJ_STRING,sdsnew("-ERR\r\n"));
@@ -1520,8 +1566,10 @@ void createSharedObjects(void) {
     shared.rpoplpush = createStringObject("RPOPLPUSH",9);
     shared.zpopmin = createStringObject("ZPOPMIN",7);
     shared.zpopmax = createStringObject("ZPOPMAX",7);
+    // 创建0~10000整数对象
     for (j = 0; j < OBJ_SHARED_INTEGERS; j++) {
         shared.integers[j] =
+                // 会设置共享对象的refcount引用计数为INT_MAX
             makeObjectShared(createObject(OBJ_STRING,(void*)(long)j));
         shared.integers[j]->encoding = OBJ_ENCODING_INT;
     }
@@ -1539,6 +1587,9 @@ void createSharedObjects(void) {
     shared.maxstring = sdsnew("maxstring");
 }
 
+/**
+ * 初始化服务器配置，给配置参数赋初始值
+ */
 void initServerConfig(void) {
     int j;
 
@@ -1554,9 +1605,11 @@ void initServerConfig(void) {
     server.timezone = getTimeZone(); /* Initialized by tzset(). */
     server.configfile = NULL;
     server.executable = NULL;
+    // serverCron函数执行的频率，默认10
     server.hz = server.config_hz = CONFIG_DEFAULT_HZ;
     server.dynamic_hz = CONFIG_DEFAULT_DYNAMIC_HZ;
     server.arch_bits = (sizeof(long) == 8) ? 64 : 32;
+    // 监听端口，默认6379
     server.port = CONFIG_DEFAULT_SERVER_PORT;
     server.tcp_backlog = CONFIG_DEFAULT_TCP_BACKLOG;
     server.bindaddr_count = 0;
@@ -1565,8 +1618,10 @@ void initServerConfig(void) {
     server.ipfd_count = 0;
     server.sofd = -1;
     server.protected_mode = CONFIG_DEFAULT_PROTECTED_MODE;
+    // 数据库数量，默认16
     server.dbnum = CONFIG_DEFAULT_DBNUM;
     server.verbosity = CONFIG_DEFAULT_VERBOSITY;
+    // 客户端超时时间，默认0为不超时
     server.maxidletime = CONFIG_DEFAULT_CLIENT_TIMEOUT;
     server.tcpkeepalive = CONFIG_DEFAULT_TCP_KEEPALIVE;
     server.active_expire_enabled = 1;
@@ -1618,6 +1673,7 @@ void initServerConfig(void) {
     server.activerehashing = CONFIG_DEFAULT_ACTIVE_REHASHING;
     server.active_defrag_running = 0;
     server.notify_keyspace_events = 0;
+    // 最大客户端数量，默认10000
     server.maxclients = CONFIG_DEFAULT_MAX_CLIENTS;
     server.blocked_clients = 0;
     memset(server.blocked_clients_by_type,0,
@@ -1716,6 +1772,7 @@ void initServerConfig(void) {
      * redis.conf using the rename-command directive. */
     server.commands = dictCreate(&commandTableDictType,NULL);
     server.orig_commands = dictCreate(&commandTableDictType,NULL);
+    // 初始化命令表
     populateCommandTable();
     server.delCommand = lookupCommandByCString("del");
     server.multiCommand = lookupCommandByCString("multi");
@@ -1936,12 +1993,20 @@ void checkTcpBacklogSettings(void) {
  * impossible to bind, or no bind addresses were specified in the server
  * configuration but the function is not able to bind * for at least
  * one of the IPv4 or IPv6 protocols. */
+/**
+ * 创建socket并启动监听
+ * @param port
+ * @param fds
+ * @param count
+ * @return
+ */
 int listenToPort(int port, int *fds, int *count) {
     int j;
 
     /* Force binding of 0.0.0.0 if no bind address is specified, always
      * entering the loop if j == 0. */
     if (server.bindaddr_count == 0) server.bindaddr[0] = NULL;
+    // 可以配置多个监听的IP地址
     for (j = 0; j < server.bindaddr_count || j == 0; j++) {
         if (server.bindaddr[j] == NULL) {
             int unsupported = 0;
@@ -1959,9 +2024,15 @@ int listenToPort(int port, int *fds, int *count) {
 
             if (*count == 1 || unsupported) {
                 /* Bind the IPv4 address as well. */
+                /**
+                 * 创建socket并启动监听
+                 */
                 fds[*count] = anetTcpServer(server.neterr,port,NULL,
                     server.tcp_backlog);
                 if (fds[*count] != ANET_ERR) {
+                    /**
+                     * 设置socket非阻塞
+                     */
                     anetNonBlock(NULL,fds[*count]);
                     (*count)++;
                 } else if (errno == EAFNOSUPPORT) {
@@ -2036,6 +2107,9 @@ void resetServerStats(void) {
     server.aof_delayed_fsync = 0;
 }
 
+/**
+ * 根据配置参数初始化服务器，创建监听套接字
+ */
 void initServer(void) {
     int j;
 
@@ -2052,6 +2126,7 @@ void initServer(void) {
     server.pid = getpid();
     server.current_client = NULL;
     server.fixed_time_expire = 0;
+    // 初始化客户端链表
     server.clients = listCreate();
     server.clients_index = raxNew();
     server.clients_to_close = listCreate();
@@ -2066,9 +2141,20 @@ void initServer(void) {
     server.clients_paused = 0;
     server.system_memory_size = zmalloc_get_memory_size();
 
+    /**
+     * 创建共享对象
+     *
+     * 对象是可共享的，robj的refcount字段存储当前对象的引用计数，只有当对象存储的是0~10000的整数时，
+     * 对象才可被共享。这些共享整数对象的引用计数被初始化为INT_MAX，保证不会被释放。
+     *
+     * 执行命令的时候会返回一些字符串的回复，这些字符串也是在这里初始化，并且不会释放这些对象，所有共享
+     * 对象存储在全局结构体变量shared中
+     */
     createSharedObjects();
     adjustOpenFilesLimit();
-    // 创建事件循环
+    /**
+     * 创建事件循环
+     */
     server.el = aeCreateEventLoop(server.maxclients+CONFIG_FDSET_INCR);
     if (server.el == NULL) {
         serverLog(LL_WARNING,
@@ -2076,10 +2162,12 @@ void initServer(void) {
             strerror(errno));
         exit(1);
     }
+    // 创建数据库字典
     server.db = zmalloc(sizeof(redisDb)*server.dbnum);
 
     /* Open the TCP listening socket for the user commands. */
     if (server.port != 0 &&
+    // 创建socket并启动监听
         listenToPort(server.port,server.ipfd,&server.ipfd_count) == C_ERR)
         exit(1);
 
@@ -2102,6 +2190,7 @@ void initServer(void) {
     }
 
     /* Create the Redis databases, and initialize other internal state. */
+    // 创建数据库字典
     for (j = 0; j < server.dbnum; j++) {
         server.db[j].dict = dictCreate(&dbDictType,NULL);
         server.db[j].expires = dictCreate(&keyptrDictType,NULL);
@@ -2151,6 +2240,13 @@ void initServer(void) {
     /* Create the timer callback, this is our way to process many background
      * operations incrementally, like clients timeout, eviction of unaccessed
      * expired keys and so forth. */
+    /**
+     * 创建时间事件
+     * serverCron为事件处理函数
+     *
+     * Redis只创建了一个时间事件，该时间事件在1毫秒后被触发，处理函数为serverCron，clientData和finalizerProc为NULL。
+     * serverCron函数实现了redis所有定时任务的周期性执行。
+     */
     if (aeCreateTimeEvent(server.el, 1, serverCron, NULL, NULL) == AE_ERR) {
         serverPanic("Can't create event loop timers.");
         exit(1);
@@ -2158,8 +2254,12 @@ void initServer(void) {
 
     /* Create an event handler for accepting new connections in TCP and Unix
      * domain sockets. */
+    // 遍历所有需要监听的socket，为其创建对应的文件事件
     for (j = 0; j < server.ipfd_count; j++) {
         /**
+         * aeCreateFileEvent创建文件事件
+         * acceptTcpHandler为事件处理函数，实现了socket连接请求的accept以及客户端对象的创建
+         *
          * 为事件循环注册一个可读事件，用来响应客户端的请求
          * 创建监听套接字
          */
@@ -4290,7 +4390,9 @@ int main(int argc, char **argv) {
     getRandomHexChars(hashseed,sizeof(hashseed));
     dictSetHashFunctionSeed((uint8_t*)hashseed);
     server.sentinel_mode = checkForSentinelMode(argc,argv);
-    // 初始化服务器配置
+    /**
+     * 初始化服务器配置，给配置参数赋初始值
+     */
     initServerConfig();
     moduleInitModulesSystem();
 
@@ -4379,7 +4481,9 @@ int main(int argc, char **argv) {
             exit(1);
         }
         resetServerSaveParams();
-        // 加载服务器配置
+        /**
+         * 加载并解析配置文件
+         */
         loadServerConfig(configfile,options);
         sdsfree(options);
     }
@@ -4404,8 +4508,7 @@ int main(int argc, char **argv) {
     if (background) daemonize();
 
     /**
-     * 根据配置参数，初始化服务器
-     * 创建监听套接字
+     * 根据配置参数，初始化服务器。创建监听套接字。
      */
     initServer();
     if (background || server.pidfile) createPidFile();
@@ -4463,7 +4566,7 @@ int main(int argc, char **argv) {
     aeSetBeforeSleepProc(server.el,beforeSleep);
     aeSetAfterSleepProc(server.el,afterSleep);
     /**
-     * 执行事件驱动循环，在循环中调用IO复用函数进行监听，等待连接和命令请求
+     * 开启事件循环，在循环中调用IO复用函数进行监听，等待连接和命令请求
      */
     aeMain(server.el);
     aeDeleteEventLoop(server.el);

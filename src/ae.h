@@ -114,17 +114,38 @@ typedef struct aeFileEvent {
  * 到达的时间事件，并调用相应的事件处理器。
  */
 typedef struct aeTimeEvent {
-    // 服务器为时间事件创建的全局唯一ID，从小到大顺序递增
+    /**
+     * 时间事件的全局唯一ID，从小到大顺序递增
+     */
     long long id; /* time event identifier. */
-    // when 时间事件到达的时间
+    /**
+     * 时间事件触发的秒数
+     */
     long when_sec; /* seconds */
+    /**
+     * 时间事件触发的毫秒数
+     */
     long when_ms; /* milliseconds */
-    // 时间事件处理器
+    /**
+     * 函数指针，时间事件处理函数，此函数的返回值表示此时间事件下次应该被触发的时间（毫秒），
+     * 是一个相对时间，从当前时间算起，过了这么多毫秒后此时间事件会被触发。
+     */
     aeTimeProc *timeProc;
+    /**
+     * 函数指针，删除时间事件节点之前会调用此函数
+     */
     aeEventFinalizerProc *finalizerProc;
+    /**
+     * 对应的客户端对象
+     */
     void *clientData;
-    // 时间事件使用链表维护
+    /**
+     * 时间事件使用链表维护，指向上一个时间事件
+     */
     struct aeTimeEvent *prev;
+    /**
+     * 时间事件使用链表维护，指向下一个时间事件
+     */
     struct aeTimeEvent *next;
 } aeTimeEvent;
 

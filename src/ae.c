@@ -60,6 +60,11 @@
     #endif
 #endif
 
+/**
+ * 创建事件循环
+ * @param setsize
+ * @return
+ */
 aeEventLoop *aeCreateEventLoop(int setsize) {
     aeEventLoop *eventLoop;
     int i;
@@ -239,12 +244,12 @@ static void aeAddMillisecondsToNow(long long milliseconds, long *sec, long *ms) 
 }
 
 /**
- * 将一个新的时间事件添加到服务器
- * @param eventLoop
- * @param milliseconds 定时或者周期的时间
- * @param proc 时间事件处理器
- * @param clientData
- * @param finalizerProc
+ * 创建一个新的时间事件添加到时间事件链表
+ * @param eventLoop 事件循环
+ * @param milliseconds 时间事件触发的时间（毫秒），相对时间，从当前时间算起，milliseconds毫秒后此时间事件会被触发
+ * @param proc 时间事件处理函数
+ * @param clientData 客户端对象
+ * @param finalizerProc 删除时间事件节点之前会调用此函数
  * @return
  */
 long long aeCreateTimeEvent(aeEventLoop *eventLoop, long long milliseconds,
@@ -415,7 +420,7 @@ static int processTimeEvents(aeEventLoop *eventLoop) {
  *
  * The function returns the number of events processed. */
 /**
- * 文件事件分派器
+ * 事件处理函数
  * 先调用aeApiPoll函数来等待事件产生，然后遍历所有已产生的事件，并调用相应事件处理器来处理这些事件
  * @param eventLoop
  * @param flags
@@ -438,6 +443,10 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
         aeTimeEvent *shortest = NULL;
         struct timeval tv, *tvp;
 
+        /**
+         * 在处理文件事件之前，会先遍历redis的时间事件，找到最早会发生的时间事件，
+         * 以此时间来作为aeApiPoll函数的超时时间。
+         */
         if (flags & AE_TIME_EVENTS && !(flags & AE_DONT_WAIT))
             shortest = aeSearchNearestTimer(eventLoop);
         if (shortest) {
@@ -474,12 +483,14 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
 
         /* Call the multiplexing API, will return only on timeout or when
          * some event fires.
-         * 调用IO多路复用函数：select、epoll、evport、kqueue中的一种。
-         * 阻塞等待事件变成就绪状态或者超时，如果有事件就绪就将对应的事件加入到EventLoop
-         * 的待处理事件队列eventLoop->fired中，然后进入下一个循环
-         *
-         * numevents是被激活事件的个数
          * */
+        /**
+         * 阻塞等待文件事件发生，调用IO多路复用函数：select、epoll、evport、kqueue中的一种。
+         * 阻塞等待事件变成就绪状态或者超时，如果有事件就绪就将对应的事件加入到EventLoop的待处理事件队列eventLoop->fired中，
+         * 然后进入下一个循环。
+         *
+         * 返回值numevents是被激活事件的个数
+         */
         numevents = aeApiPoll(eventLoop, tvp);
 
         /* After sleep callback. */
@@ -513,7 +524,10 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
              *
              * Fire the readable event if the call sequence is not
              * inverted.
-             * 根据激活原因调用回调函数，先可读事件，再可写事件
+             */
+            /**
+             * 处理文件事件，根据事件类型调用rfileProc或者wfileProc函数，
+             * redis会先进行可读事件的处理，再进行可写事件的处理。
              */
             if (!invert && fe->mask & mask & AE_READABLE) {
                 // 处理读事件
@@ -544,7 +558,7 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
     }
     /* Check time events */
     if (flags & AE_TIME_EVENTS)
-        // 处理时间时间
+        // 处理时间事件
         processed += processTimeEvents(eventLoop);
 
     return processed; /* return the number of processed file/time events */
@@ -579,10 +593,19 @@ int aeWait(int fd, int mask, long long milliseconds) {
     }
 }
 
+/**
+ * 开启事件循环
+ * @param eventLoop
+ */
 void aeMain(aeEventLoop *eventLoop) {
     eventLoop->stop = 0;
     // 事件循环
     while (!eventLoop->stop) {
+        /**
+         * 每次事件循环开始，也就是redis阻塞等待文件事件之前都会执行beforesleep函数。
+         * beforesleep函数执行一些不是很费时的操作，如：集群相关操作，过期键删除操作（快速过期键删除），
+         * 向客户端返回命令回复等。
+         */
         if (eventLoop->beforesleep != NULL)
             eventLoop->beforesleep(eventLoop);
         /**

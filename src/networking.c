@@ -97,9 +97,11 @@ client *createClient(int fd) {
      * in the context of a client. When commands are executed in other
      * contexts (for instance a Lua script) we need a non connected client. */
     if (fd != -1) {
-        // 非阻塞IO
+        // 设置为非阻塞IO模式
         anetNonBlock(NULL,fd);
+        // 设置TCP_NODELAY
         anetEnableTcpNoDelay(NULL,fd);
+        // 如果服务端配置了tcpkeepalive，则设置SO_KEEPALIVE
         if (server.tcpkeepalive)
             anetKeepAlive(NULL,fd,server.tcpkeepalive);
         /**
@@ -680,7 +682,9 @@ int clientHasPendingReplies(client *c) {
  */
 static void acceptCommonHandler(int fd, int flags, char *ip) {
     client *c;
-    // 根据客户端描述符创建客户端实例
+    /**
+     * 根据客户端描述符创建客户端实例
+     */
     if ((c = createClient(fd)) == NULL) {
         serverLog(LL_WARNING,
             "Error registering fd event for the new client: %s (fd=%d)",
@@ -767,7 +771,9 @@ void acceptTcpHandler(aeEventLoop *el, int fd, void *privdata, int mask) {
     UNUSED(privdata);
 
     while(max--) {
-        // 调用accept接收客户端连接请求，返回与客户端关联的文件描述符
+        /**
+         * 调用accept接收客户端连接请求，返回与客户端关联的文件描述符
+         */
         cfd = anetTcpAccept(server.neterr, fd, cip, sizeof(cip), &cport);
         if (cfd == ANET_ERR) {
             if (errno != EWOULDBLOCK)
@@ -776,7 +782,9 @@ void acceptTcpHandler(aeEventLoop *el, int fd, void *privdata, int mask) {
             return;
         }
         serverLog(LL_VERBOSE,"Accepted %s:%d", cip, cport);
-        // 根据文件描述符创建客户端实例，用于和客户端交互
+        /**
+         * 根据文件描述符创建客户端实例，用于和客户端交互
+         */
         acceptCommonHandler(cfd,0,cip);
     }
 }

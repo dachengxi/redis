@@ -483,6 +483,9 @@ typedef long long ustime_t; /* microsecond time type. */
 /* Using the following macro you can run code inside serverCron() with the
  * specified period, specified in milliseconds.
  * The actual resolution depends on server.hz. */
+/**
+ * 宏定义，定义了定时任务按照指定时间周期执行
+ */
 #define run_with_period(_ms_) if ((_ms_ <= 1000/server.hz) || !(server.cronloops%((_ms_)/(1000/server.hz))))
 
 /* We can print the stacktrace, so our assert is defined this way: */
@@ -1250,6 +1253,11 @@ struct redisServer {
     int config_hz;              /* Configured HZ value. May be different than
                                    the actual 'hz' field value if dynamic-hz
                                    is enabled. */
+    /**
+     * 表示serverCron函数执行的频率，可以配置，最小为1，最大为500，默认为10。
+     * 假设hz=10，则serverCron函数返回1000/10=100，会更新当前时间事件的触发时间为100毫秒，
+     * 即serverCron函数执行周期为100毫秒
+     */
     int hz;                     /* serverCron() calls frequency in hertz */
     /**
      * 数据库数组
@@ -1272,6 +1280,9 @@ struct redisServer {
     char *requirepass;          /* Pass for AUTH command, or NULL */
     char *pidfile;              /* PID file path */
     int arch_bits;              /* 32 or 64 depending on sizeof(long) */
+    /**
+     * 记录serverCron函数的执行次数
+     */
     int cronloops;              /* Number of times the cron function run */
     char runid[CONFIG_RUN_ID_SIZE+1];  /* ID always different at every exec. */
     int sentinel_mode;          /* True if this instance is a Sentinel. */

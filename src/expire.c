@@ -95,11 +95,18 @@ int activeExpireCycleTryExpire(redisDb *db, dictEntry *de, long long now) {
  * as specified by the ACTIVE_EXPIRE_CYCLE_SLOW_TIME_PERC define. */
 
 /**
- * 过期键定期删除策略。
- * redis的时间事件是serverCron执行的时候，activeExpireCycle就会被调用，
- * 在规定的时间内，分多次遍历服务器中的各个数据库，从数据库的expires字典中随机
- * 检查一部分键的过期时间，并删除过期键
- * @param type
+ * 过期键定期删除。
+ * redis的时间事件是serverCron执行的时候，activeExpireCycle就会被调用，在规定的时间内，分多次遍历服务器中的各个数据库，
+ * 从数据库的expires字典中随机检查一部分键的过期时间，并删除过期键。
+ *
+ * 最多遍历dbs_per_call个数据库，并记录每个数据库删除的过期键数目，当删除过期键数目超过阈值时，就会认为此次删除过期键较多，
+ * 需要下次再处理。极端情况下当数据库键数目非常多且都过期时，循环会一直执行下去，redis使用timelimit来进行限制时间，每执行
+ * 16次循环，都会检测执行时间是否超过了timelimit，如果超过了就结束循环。
+ *
+ * redis过期键删除有两种策略：
+ * 1. 访问数据库键时校验是否过期，如果过期则删除
+ * 2. 周期性删除，beforeSleep函数和serverCron函数都会执行周期性删除
+ * @param type ACTIVE_EXPIRE_CYCLE_FAST为快速过期键删除
  */
 void activeExpireCycle(int type) {
     /* This function has some global state in order to continue the work
@@ -109,6 +116,7 @@ void activeExpireCycle(int type) {
     static long long last_fast_cycle = 0; /* When last fast cycle ran. */
 
     int j, iteration = 0;
+    // 每次过期键删除的时候，最多遍历的数据库数量
     int dbs_per_call = CRON_DBS_PER_CALL;
     long long start = ustime(), timelimit, elapsed;
 
@@ -117,11 +125,14 @@ void activeExpireCycle(int type) {
      * expires and evictions of keys not being performed. */
     if (clientsArePaused()) return;
 
+    // 如果类型是ACTIVE_EXPIRE_CYCLE_FAST，表示是快速过期键删除
     if (type == ACTIVE_EXPIRE_CYCLE_FAST) {
         /* Don't start a fast cycle if the previous cycle did not exit
          * for time limit. Also don't repeat a fast cycle for the same period
          * as the fast cycle total duration itself. */
+        // 上次activeExpireCycle函数是否已经执行完毕
         if (!timelimit_exit) return;
+        // 快速过期键删除时，函数执行时间不超过1000微秒
         if (start < last_fast_cycle + ACTIVE_EXPIRE_CYCLE_FAST_DURATION*2) return;
         last_fast_cycle = start;
     }

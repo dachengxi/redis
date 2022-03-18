@@ -169,14 +169,22 @@ void queueLoadModule(sds path, sds *argv, int argc) {
     listAddNodeTail(server.loadmodule_queue,loadmod);
 }
 
+/**
+ * 解析配置
+ * @param config
+ */
 void loadServerConfigFromString(char *config) {
     char *err = NULL;
+    // totlines记录配置总行数
     int linenum = 0, totlines, i;
     int slaveof_linenum = 0;
+    // 存储分割后的配置
     sds *lines;
 
+    // 将字符串以\n为分隔符分割为多行
     lines = sdssplitlen(config,strlen(config),"\n",1,&totlines);
 
+    // 遍历配置行
     for (i = 0; i < totlines; i++) {
         sds *argv;
         int argc;
@@ -185,9 +193,11 @@ void loadServerConfigFromString(char *config) {
         lines[i] = sdstrim(lines[i]," \t\r\n");
 
         /* Skip comments and blank lines */
+        // 跳过注释行和空行，#开头的为注释行
         if (lines[i][0] == '#' || lines[i][0] == '\0') continue;
 
         /* Split into arguments */
+        // 解析配置的参数
         argv = sdssplitargs(lines[i],&argc);
         if (argv == NULL) {
             err = "Unbalanced quotes in configuration line";
@@ -834,6 +844,11 @@ loaderr:
  * Both filename and options can be NULL, in such a case are considered
  * empty. This way loadServerConfig can be used to just load a file or
  * just load a string. */
+/**
+ * 加载并解析配置文件
+ * @param filename 配置文件全路径名
+ * @param options 命令行输入的配置参数
+ */
 void loadServerConfig(char *filename, char *options) {
     sds config = sdsempty();
     char buf[CONFIG_MAX_LINE+1];
@@ -860,6 +875,9 @@ void loadServerConfig(char *filename, char *options) {
         config = sdscat(config,"\n");
         config = sdscat(config,options);
     }
+    /**
+     * 解析配置
+     */
     loadServerConfigFromString(config);
     sdsfree(config);
 }
