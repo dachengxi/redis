@@ -1326,54 +1326,93 @@ static void setProtocolError(const char *errstr, client *c) {
  * This function is called if processInputBuffer() detects that the next
  * command is in RESP format, so the first byte in the command is found
  * to be '*'. Otherwise for inline commands processInlineBuffer() is called. */
+/**
+ * 解析客户端发来的命令，比如set key value，客户端会将命令转换为redis的协议格式：*3\r\n$3\r\nset\r\n$3\r\nkey\r\n$5\r\nvalue\r\n
+ * @param c
+ * @return
+ */
 int processMultibulkBuffer(client *c) {
     char *newline = NULL;
     int ok;
     long long ll;
 
+    /**
+     * client的multibulklen属性记录正在解析的一条完整的命令中尚未处理的命令参数个数，
+     * 如果multibulklen为0，则说明当前要解析的是命令请求的开头。
+     */
     if (c->multibulklen == 0) {
         /* The client should have been reset */
         serverAssertWithInfo(c,NULL,c->argc == 0);
 
         /* Multi bulk length cannot be read without a \r\n */
+        /**
+         * 从client的querybuf中获取第一个\r之前的数据
+         *
+         * strchr() 用来查找某字符在字符串中首次出现的位置，找到第一次出现该字符的地址，并返回该地址
+         */
         newline = strchr(c->querybuf+c->qb_pos,'\r');
+        // 如果在client的querybuf中找不到\r，说明收到的请求数据还不完整
         if (newline == NULL) {
+            // 长度超过64K，返回给客户端错误信息
             if (sdslen(c->querybuf)-c->qb_pos > PROTO_INLINE_MAX_SIZE) {
+                // 返回给客户端的错误信息
                 addReplyError(c,"Protocol error: too big mbulk count string");
+                // 为客户端标志client的flags增加CLIENT_CLOSE_AFTER_REPLY标记
                 setProtocolError("too big mbulk count string",c);
             }
+            // 收到数据不完整，返回-1
             return C_ERR;
         }
 
         /* Buffer should also contain \n */
+        // 收到的客户端请求不完整，缺少\n
         if (newline-(c->querybuf+c->qb_pos) > (ssize_t)(sdslen(c->querybuf)-c->qb_pos-2))
             return C_ERR;
 
         /* We know for sure there is a whole line since newline != NULL,
          * so go ahead and find out the multi bulk length. */
+        // querybuf的0索引处需要为*，也就是命令第一个字符必须是*
         serverAssertWithInfo(c,NULL,c->querybuf[c->qb_pos] == '*');
+        /**
+         * c->querybuf+1+c->qb_pos 跳过第一个字符*后的地址
+         * newline是第一个\r的地址
+         * newline-(c->querybuf+1+c->qb_pos)是长度
+         * ll存放命令个数
+         */
         ok = string2ll(c->querybuf+1+c->qb_pos,newline-(c->querybuf+1+c->qb_pos),&ll);
+        // 如果解析失败或者命令个数大于1M，返回给客户端失败信息
         if (!ok || ll > 1024*1024) {
             addReplyError(c,"Protocol error: invalid multibulk length");
             setProtocolError("invalid mbulk count",c);
             return C_ERR;
         }
 
+        // qb_pos指向下一行首地址，也就是第一个\r\n后的地址
         c->qb_pos = (newline-c->querybuf)+2;
 
+        // 命令个数小于等于0，直接返回0
         if (ll <= 0) return C_OK;
 
+        // 将命令个数赋值给待解析的命令的个数属性：multibulklen
         c->multibulklen = ll;
 
         /* Setup argv array on client structure */
         if (c->argv) zfree(c->argv);
+        // 根据multibulklen的值来申请argv的内存
         c->argv = zmalloc(sizeof(robj*)*c->multibulklen);
     }
 
     serverAssertWithInfo(c,NULL,c->multibulklen > 0);
+    // 挨个处理命令中的每一行
     while(c->multibulklen) {
         /* Read bulk length if unknown */
+        /**
+         * bulklen记录将要解析的命令请求行中包含的字符串的长度。
+         *
+         * bulklen为-1说明当前要解析的是长度行
+         */
         if (c->bulklen == -1) {
+            // 长度行
             newline = strchr(c->querybuf+c->qb_pos,'\r');
             if (newline == NULL) {
                 if (sdslen(c->querybuf)-c->qb_pos > PROTO_INLINE_MAX_SIZE) {
@@ -1386,9 +1425,11 @@ int processMultibulkBuffer(client *c) {
             }
 
             /* Buffer should also contain \n */
+            // 长度行需要包含\n
             if (newline-(c->querybuf+c->qb_pos) > (ssize_t)(sdslen(c->querybuf)-c->qb_pos-2))
                 break;
 
+            // 长度行要以$开头
             if (c->querybuf[c->qb_pos] != '$') {
                 addReplyErrorFormat(c,
                     "Protocol error: expected '$', got '%c'",
@@ -1397,6 +1438,7 @@ int processMultibulkBuffer(client *c) {
                 return C_ERR;
             }
 
+            // 从长度行中获取长度，存到ll
             ok = string2ll(c->querybuf+c->qb_pos+1,newline-(c->querybuf+c->qb_pos+1),&ll);
             if (!ok || ll < 0 || ll > server.proto_max_bulk_len) {
                 addReplyError(c,"Protocol error: invalid bulk length");
@@ -1404,7 +1446,9 @@ int processMultibulkBuffer(client *c) {
                 return C_ERR;
             }
 
+            // qb_pos指向长度行的\r\n的后面位置，也就是指向下一个命令行的首地址
             c->qb_pos = newline-c->querybuf+2;
+            // 命令行长度大于等于32k
             if (ll >= PROTO_MBULK_BIG_ARG) {
                 /* If we are going to read a large object from network
                  * try to make it likely that it will start at c->querybuf
@@ -1415,6 +1459,11 @@ int processMultibulkBuffer(client *c) {
                  * or equal to ll+2. If the data length is greater than
                  * ll+2, trimming querybuf is just a waste of time, because
                  * at this time the querybuf contains not only our bulk. */
+                /**
+                 * 如果将要解析的命令行字符串长度大于等于32k，为了后续创建字符串对象时避免复制大块内存，
+                 * 直接使用querybuf创建字符串对象，需要将querybuf中pos之前的数据删除掉，并将pos置为0，
+                 * 必要情况下需要为querybuf扩容。
+                 */
                 if (sdslen(c->querybuf)-c->qb_pos <= (size_t)ll+2) {
                     sdsrange(c->querybuf,c->qb_pos,-1);
                     c->qb_pos = 0;
@@ -1423,10 +1472,12 @@ int processMultibulkBuffer(client *c) {
                     c->querybuf = sdsMakeRoomFor(c->querybuf,ll+2);
                 }
             }
+            // 将要解析的命令行的长度
             c->bulklen = ll;
         }
 
         /* Read bulk argument */
+        // 收到的网络请求中数据还不完整，退出循环
         if (sdslen(c->querybuf)-c->qb_pos < (size_t)(c->bulklen+2)) {
             /* Not enough data (+2 == trailing \r\n) */
             break;
@@ -1434,6 +1485,14 @@ int processMultibulkBuffer(client *c) {
             /* Optimization: if the buffer contains JUST our bulk element
              * instead of creating a new object by *copying* the sds we
              * just use the current sds string. */
+            /**
+             * 如果将要解析的命令行字符串长度大于等于32k，为了后续创建字符串对象时避免复制大块内存，
+             * 直接使用querybuf创建字符串对象，需要将querybuf中pos之前的数据删除掉，并将pos置为0，
+             * 必要情况下需要为querybuf扩容。
+             *
+             * 如果这里三个条件都满足，说明querybuf中包含的是一个大于32k的大字符串行，为了避免拷贝大块内存，
+             * 直接使用querybuf创建字符串对象，并存储到argv中；然后重新创建querybuf，并为其扩容为c->bulklen+2
+             */
             if (c->qb_pos == 0 &&
                 c->bulklen >= PROTO_MBULK_BIG_ARG &&
                 sdslen(c->querybuf) == (size_t)(c->bulklen+2))
@@ -1444,17 +1503,23 @@ int processMultibulkBuffer(client *c) {
                  * likely... */
                 c->querybuf = sdsnewlen(SDS_NOINIT,c->bulklen+2);
                 sdsclear(c->querybuf);
-            } else {
+            }
+            // 如果不是大于32k的大字符串，则创建字符串对象，并将querybuf+pos的内容复制到该字符串对象中
+            else {
                 c->argv[c->argc++] =
                     createStringObject(c->querybuf+c->qb_pos,c->bulklen);
+                // qb_pos指向下一行的首地址
                 c->qb_pos += c->bulklen+2;
             }
+            // 解析完字符串行之后，将bulklen置为-1，下次循环就进入解析长度的逻辑
             c->bulklen = -1;
+            // 待解析的命令参数个数减1
             c->multibulklen--;
         }
     }
 
     /* We're done when c->multibulk == 0 */
+    // 待解析命令参数个数为0，说明已经完整的解析了一个命令请求
     if (c->multibulklen == 0) return C_OK;
 
     /* Still not ready to process the command */
@@ -1465,7 +1530,10 @@ int processMultibulkBuffer(client *c) {
  * more query buffer to process, because we read more data from the socket
  * or because a client was blocked and later reactivated, so there could be
  * pending query buffer, already representing a full command, to process.
- * 解析客户端命令
+ */
+/**
+ * 处理客户端命令
+ * @param c
  */
 void processInputBuffer(client *c) {
     server.current_client = c;
@@ -1505,8 +1573,16 @@ void processInputBuffer(client *c) {
          * 分别保存到客户端的argv数组和argc属性里面
          */
         if (c->reqtype == PROTO_REQ_INLINE) {
+            /**
+             * 解析内联命令，在telnet会话中使用命令时是内联命令
+             */
             if (processInlineBuffer(c) != C_OK) break;
         } else if (c->reqtype == PROTO_REQ_MULTIBULK) {
+            /**
+             * 解析客户端发来的命令，比如set key value，客户端会将命令转换为redis的协议格式：*3\r\n$3\r\nset\r\n$3\r\nkey\r\n$5\r\nvalue\r\n
+             *
+             * processMultibulkBuffer返回-1，说明还需要继续等待解析querybuf中的命令
+             */
             if (processMultibulkBuffer(c) != C_OK) break;
         } else {
             serverPanic("Unknown request type");
@@ -1554,6 +1630,10 @@ void processInputBuffer(client *c) {
  * the replication forwarding to the sub-slaves, in case the client 'c'
  * is flagged as master. Usually you want to call this instead of the
  * raw processInputBuffer(). */
+/**
+ * 处理客户端命令
+ * @param c
+ */
 void processInputBufferAndReplicate(client *c) {
     if (!(c->flags & CLIENT_MASTER)) {
         // 处理客户端命令
@@ -1651,6 +1731,8 @@ void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
      * was actually applied to the master state: this quantity, and its
      * corresponding part of the replication stream, will be propagated to
      * the sub-slaves and to the replication backlog.
+     */
+    /**
      * 处理客户端命令
      */
     processInputBufferAndReplicate(c);

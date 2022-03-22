@@ -935,6 +935,9 @@ typedef struct client {
      * 分别保存在：argv和argc属性中
      */
     sds querybuf;           /* Buffer we use to accumulate client queries. */
+    /**
+     * querybuf中已经处理的字节数
+     */
     size_t qb_pos;          /* The position we have read in querybuf. */
     sds pending_querybuf;   /* If this client is flagged as master, this buffer
                                represents the yet not applied portion of the
@@ -962,7 +965,13 @@ typedef struct client {
      */
     struct redisCommand *cmd, *lastcmd;  /* Last command executed. */
     int reqtype;            /* Request protocol type: PROTO_REQ_* */
+    /**
+     * 记录正在解析的一条完整的命令中尚未处理的命令参数个数
+     */
     int multibulklen;       /* Number of multi bulk arguments left to read. */
+    /**
+     * 记录将要解析的命令请求行中包含的字符串的长度
+     */
     long bulklen;           /* Length of bulk argument in multi bulk request. */
     /**
      * 可变的输出缓冲区，存储待返回给客户端的命令回复数据，链表的节点存储的值类型为clientReplyBlock
