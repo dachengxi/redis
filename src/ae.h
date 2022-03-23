@@ -200,7 +200,9 @@ typedef struct aeEventLoop {
      */
     void *apidata; /* This is used for polling API specific data */
     /**
-     * redis服务器需要阻塞等待文件事件的发生，进程阻塞前会调用beforesleep函数
+     * redis服务器需要阻塞等待文件事件的发生，进程阻塞前会调用beforesleep函数。
+     * beforesleep函数执行一些不是很费时的操作，如：集群相关操作，过期键删除操作（快速过期键删除），
+     * 向客户端返回命令回复等。
      */
     aeBeforeSleepProc *beforesleep;
     /**

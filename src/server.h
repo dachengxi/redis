@@ -204,19 +204,85 @@ typedef long long ustime_t; /* microsecond time type. */
 
 /* Command flags. Please check the command table defined in the redis.c file
  * for more information about the meaning of every flag. */
+/**
+ * w标识
+ * 写命令
+ * set、del、incr、lpush
+ */
 #define CMD_WRITE (1<<0)            /* "w" flag */
+/**
+ * r标识
+ * 读命令
+ * get、exists、llen
+ */
 #define CMD_READONLY (1<<1)         /* "r" flag */
+/**
+ * m标识
+ * 内存不足时，拒绝执行此类命令
+ * set、append、lpush
+ */
 #define CMD_DENYOOM (1<<2)          /* "m" flag */
 #define CMD_MODULE (1<<3)           /* Command exported by module. */
+/**
+ * a标识
+ * 管理命令
+ * save、shutdown、slaveof
+ */
 #define CMD_ADMIN (1<<4)            /* "a" flag */
+/**
+ * p标识
+ * 发布订阅相关命令
+ * subscribe、unsubscribe
+ */
 #define CMD_PUBSUB (1<<5)           /* "p" flag */
+/**
+ * s标识
+ * 命令不可在Lua脚本使用
+ * auth、save、brpop
+ */
 #define CMD_NOSCRIPT (1<<6)         /* "s" flag */
+/**
+ * R标识
+ * 随机命令，即使命令请求参数完全相同，返回结果也可能不同
+ * srandmember、scan、time
+ */
 #define CMD_RANDOM (1<<7)           /* "R" flag */
+/**
+ * S标识
+ * 当在Lua脚本使用此类命令时，需要对输出结果做排序
+ * sinter、sunion、sdiff
+ */
 #define CMD_SORT_FOR_SCRIPT (1<<8)  /* "S" flag */
+/**
+ * l标识
+ * 服务器启动载入过程中，只能执行此类命令
+ * select、auth、info
+ */
 #define CMD_LOADING (1<<9)          /* "l" flag */
+/**
+ * t标识
+ * 当从服务器与主服务器断开连接，且从服务器配置slave-serve-stable-data no时，
+ * 从服务器只能执行此类命令
+ * auth、shutdown、info
+ */
 #define CMD_STALE (1<<10)           /* "t" flag */
+/**
+ * M标识
+ * 此类命令不会传播给监视器
+ * exec
+ */
 #define CMD_SKIP_MONITOR (1<<11)    /* "M" flag */
+/**
+ * k标识
+ * 集群槽slot迁移时有用
+ * restore-asking
+ */
 #define CMD_ASKING (1<<12)          /* "k" flag */
+/**
+ * F标识
+ * 命令执行时间超过阈值时，会记录延迟事件，此标志用于区分延迟事件类型，F表示fast-command
+ * get、setnx、strlen、exists
+ */
 #define CMD_FAST (1<<13)            /* "F" flag */
 #define CMD_MODULE_GETKEYS (1<<14)  /* Use the modules getkeys interface. */
 #define CMD_MODULE_NO_CLUSTER (1<<15) /* Deny on Redis Cluster. */
@@ -1339,6 +1405,10 @@ struct redisServer {
      */
     list *clients;              /* List of active clients */
     list *clients_to_close;     /* Clients to close asynchronously */
+    /**
+     * 当将返回给客户端的数据暂时缓存在输出缓冲区或者输出链表的同时，会将客户端添加到
+     * clients_pending_write链表中，后续能快速查找出哪些客户端有数据需要发送。
+     */
     list *clients_pending_write; /* There is to write or install handler. */
     list *slaves, *monitors;    /* List of slaves and MONITORs */
     client *current_client;     /* Current client executing the command. */

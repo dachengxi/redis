@@ -2556,6 +2556,11 @@ void preventCommandReplication(client *c) {
  * preventCommandReplication(client *c);
  *
  */
+/**
+ * 命令处理函数，执行命令
+ * @param c
+ * @param flags
+ */
 void call(client *c, int flags) {
     long long dirty;
     ustime_t start, duration;
@@ -2690,7 +2695,11 @@ void call(client *c, int flags) {
  * If C_OK is returned the client is still alive and valid and
  * other operations can be performed by the caller. Otherwise
  * if C_ERR is returned the client was destroyed (i.e. after QUIT).
+ */
+/**
  * 执行客户端命令
+ * @param c
+ * @return
  */
 int processCommand(client *c) {
     moduleCallCommandFilters(c);
@@ -2699,6 +2708,7 @@ int processCommand(client *c) {
      * go through checking for replication and QUIT will cause trouble
      * when FORCE_REPLICATION is enabled and would be implemented in
      * a regular command proc. */
+    // 命令是quit，直接返回，并设置客户端标志位为CLIENT_CLOSE_AFTER_REPLY
     if (!strcasecmp(c->argv[0]->ptr,"quit")) {
         addReply(c,shared.ok);
         c->flags |= CLIENT_CLOSE_AFTER_REPLY;
@@ -2707,15 +2717,17 @@ int processCommand(client *c) {
 
     /* Now lookup the command and check ASAP about trivial error conditions
      * such as wrong arity, bad command name and so forth.
-     * 客户端client的argv[0]位置保存的是命令，数组中后面的位置中保存的是命令需要的参数
+     */
+    /**
+     * 客户端client的argv[0]位置保存的是命令，数组中后面的位置中保存的是命令需要的参数。
      *
      * redis有个命令字典，保存了命令名字和命令实现函数的关系。字典的键是命令的名字，
      * 字典的值是redisCommand结构，每个redisCommand结构记录了一个redis命令的实现信息。
-     *
-     * 从命令字典中查找命令对应的redisCommand结构，并保存到client的cmd属性中
+     * lookupCommand方法从命令字典中查找命令对应的redisCommand结构，并保存到client的cmd属性中
      */
     c->cmd = c->lastcmd = lookupCommand(c->argv[0]->ptr);
     if (!c->cmd) {
+        // 查不到命令，就返回错误
         flagTransaction(c);
         sds args = sdsempty();
         int i;
@@ -2725,7 +2737,9 @@ int processCommand(client *c) {
             (char*)c->argv[0]->ptr, args);
         sdsfree(args);
         return C_OK;
-    } else if ((c->cmd->arity > 0 && c->cmd->arity != c->argc) ||
+    }
+    // 参数数量错误
+    else if ((c->cmd->arity > 0 && c->cmd->arity != c->argc) ||
                (c->argc < -c->cmd->arity)) {
         flagTransaction(c);
         addReplyErrorFormat(c,"wrong number of arguments for '%s' command",
@@ -2734,6 +2748,7 @@ int processCommand(client *c) {
     }
 
     /* Check if the user is authenticated */
+    // 需要认证，但是认证未通过
     if (server.requirepass && !c->authenticated && c->cmd->proc != authCommand)
     {
         flagTransaction(c);
@@ -2773,6 +2788,10 @@ int processCommand(client *c) {
      * the event loop since there is a busy Lua script running in timeout
      * condition, to avoid mixing the propagation of scripts with the
      * propagation of DELs due to eviction. */
+    /**
+     * 配置文件中如果配置了maxmemory xxx最大内存限制，并且当前内存超过了该阈值，服务器会拒绝执行带有m标识（CMD_DENYOOM)的命令，
+     * 比如：set、append、lpush等命令
+     */
     if (server.maxmemory && !server.lua_timedout) {
         int out_of_memory = freeMemoryIfNeededAndSafe() == C_ERR;
         /* freeMemoryIfNeeded may flush slave output buffers. This may result
@@ -2782,6 +2801,7 @@ int processCommand(client *c) {
         /* It was impossible to free enough memory, and the command the client
          * is trying to execute is denied during OOM conditions or the client
          * is in MULTI/EXEC context? Error. */
+        // 拒绝执行带m标识的命令，或者客户端处于MULTI/EXEC上下文中
         if (out_of_memory &&
             (c->cmd->flags & CMD_DENYOOM ||
              (c->flags & CLIENT_MULTI && c->cmd->proc != execCommand))) {
@@ -2894,7 +2914,9 @@ int processCommand(client *c) {
         queueMultiCommand(c);
         addReply(c,shared.queued);
     } else {
-        // 调用命令处理函数
+        /**
+         * 调用命令处理函数
+         */
         call(c,CMD_CALL_FULL);
         c->woff = server.master_repl_offset;
         if (listLength(server.ready_keys))

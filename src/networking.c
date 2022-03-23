@@ -308,6 +308,16 @@ void _addReplyStringToList(client *c, const char *s, size_t len) {
  * -------------------------------------------------------------------------- */
 
 /* Add the object 'obj' string representation to the client output buffer. */
+/**
+ * Redis服务器返回结果类型不同，协议格式不同，客户端可根据返回结果的第一个字符判断返回类型。Redis返回结果可分为5类：
+ * 1. 状态回复，第一个字符是+
+ * 2. 错误回复，第一个字符是-
+ * 3. 整数回复，第一个字符是:
+ * 4. 批量回复，第一个字符是$
+ * 5. 多条批量回复，第一个字符是*
+ * @param c
+ * @param obj
+ */
 void addReply(client *c, robj *obj) {
     if (prepareClientToWrite(c) != C_OK) return;
 
