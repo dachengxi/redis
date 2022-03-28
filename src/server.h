@@ -567,23 +567,23 @@ typedef long long ustime_t; /* microsecond time type. */
 
 /* The actual Redis Object */
 /**
- * 字符串对象
+ * redis对象（redisObject）的类型：字符串对象
  */
 #define OBJ_STRING 0    /* String object. */
 /**
- * 列表对象
+ * redis对象（redisObject）的类型：列表对象
  */
 #define OBJ_LIST 1      /* List object. */
 /**
- * 集合对象
+ * redis对象（redisObject）的类型：集合对象
  */
 #define OBJ_SET 2       /* Set object. */
 /**
- * 有序集合对象
+ * redis对象（redisObject）的类型：有序集合对象
  */
 #define OBJ_ZSET 3      /* Sorted set object. */
 /**
- * 散列表对象
+ * redis对象（redisObject）的类型：散列表对象
  */
 #define OBJ_HASH 4      /* Hash object. */
 
@@ -598,7 +598,13 @@ typedef long long ustime_t; /* microsecond time type. */
  * by a 64 bit module type ID, which has a 54 bits module-specific signature
  * in order to dispatch the loading to the right module, plus a 10 bits
  * encoding version. */
+/**
+ * redis对象（redisObject）的类型：模块对象
+ */
 #define OBJ_MODULE 5    /* Module object. */
+/**
+ * redis对象（redisObject）的类型：流对象
+ */
 #define OBJ_STREAM 6    /* Stream object. */
 
 /* Extract encver / signature from a module type ID. */
@@ -716,47 +722,47 @@ typedef struct RedisModuleDigest {
  * internally represented in multiple ways. The 'encoding' field of the object
  * is set to one of this fields for this object. */
 /**
- * 简单动态字符串sds编码，该类型对象可存储：字符串
+ * redis对象（redisObject）的编码：简单动态字符串sds编码，该类型对象可存储：字符串
  */
 #define OBJ_ENCODING_RAW 0     /* Raw representation */
 /**
- * 整数编码，该类型对象可存储：字符串
+ * redis对象（redisObject）的编码：整数编码，该类型对象可存储：字符串
  */
 #define OBJ_ENCODING_INT 1     /* Encoded as integer */
 /**
- * 字典，该类型对象可存储：集合，散列表，有序集合
+ * redis对象（redisObject）的编码：字典，该类型对象可存储：集合，散列表，有序集合
  */
 #define OBJ_ENCODING_HT 2      /* Encoded as hash table */
 /**
- * 未使用
+ * redis对象（redisObject）的编码：未使用
  */
 #define OBJ_ENCODING_ZIPMAP 3  /* Encoded as zipmap */
 /**
- * 双端链表，不再使用
+ * redis对象（redisObject）的编码：双端链表，不再使用
  */
 #define OBJ_ENCODING_LINKEDLIST 4 /* No longer used: old list encoding. */
 /**
- * 压缩列表，该类型对象可存储：散列表、有序集合
+ * redis对象（redisObject）的编码：压缩列表，该类型对象可存储：散列表、有序集合
  */
 #define OBJ_ENCODING_ZIPLIST 5 /* Encoded as ziplist */
 /**
- * 整数集合，该类型对象可存储：集合
+ * redis对象（redisObject）的编码：整数集合，该类型对象可存储：集合
  */
 #define OBJ_ENCODING_INTSET 6  /* Encoded as intset */
 /**
- * 跳表，该类型对象可存储：有序集合
+ * redis对象（redisObject）的编码：跳表，该类型对象可存储：有序集合
  */
 #define OBJ_ENCODING_SKIPLIST 7  /* Encoded as skiplist */
 /**
- * embstr编码的sds,该类型对象可存储：字符串
+ * redis对象（redisObject）的编码：embstr编码的sds,该类型对象可存储：字符串
  */
 #define OBJ_ENCODING_EMBSTR 8  /* Embedded sds string encoding */
 /**
- * 快速链表，该类型对象可存储：列表
+ * redis对象（redisObject）的编码：快速链表，该类型对象可存储：列表
  */
 #define OBJ_ENCODING_QUICKLIST 9 /* Encoded as linked list of ziplists */
 /**
- * stream，该类型对象可存储：stream
+ * redis对象（redisObject）的编码：stream，该类型对象可存储：stream
  */
 #define OBJ_ENCODING_STREAM 10 /* Encoded as a radix tree of listpacks */
 
@@ -767,6 +773,15 @@ typedef struct RedisModuleDigest {
 #define OBJ_SHARED_REFCOUNT INT_MAX
 /**
  * redis对象
+ * 根据类型不同，可以分为：
+ * - 字符串对象
+ * - 列表对象
+ * - 集合对象
+ * - 有序集合对象
+ * - 散列表对象
+ * - 模块对象
+ * - 流对象
+ * 执行命令前可根据对象类型判断是否可以执行命令。
  */
 typedef struct redisObject {
     /**
@@ -885,10 +900,17 @@ typedef struct redisDb {
      * 执行exec命令的时候，如果客户端是dirty的，则会拒绝执行事务。
      */
     dict *watched_keys;         /* WATCHED keys for MULTI/EXEC CAS */
-    // 数据的序号
+    /**
+     * 数据库的序号
+     */
     int id;                     /* Database ID */
-    // 存储数据库对象的平均TTL，用于统计
+    /**
+     * 存储数据库对象的平均TTL，用于统计
+     */
     long long avg_ttl;          /* Average TTL, just for stats */
+    /**
+     * 逐渐尝试注册碎片整理的key列表
+     */
     list *defrag_later;         /* List of key names to attempt to defrag one by one, gradually. */
 } redisDb;
 
@@ -2323,6 +2345,13 @@ robj *lookupKeyReadOrReply(client *c, robj *key, robj *reply);
 robj *lookupKeyWriteOrReply(client *c, robj *key, robj *reply);
 robj *lookupKeyReadWithFlags(redisDb *db, robj *key, int flags);
 robj *objectCommandLookup(client *c, robj *key);
+/**
+ * 处理object命令，可在不修改LRU和其他参数的情况下查找对象，并带有回复功能
+ * @param c
+ * @param key
+ * @param reply
+ * @return
+ */
 robj *objectCommandLookupOrReply(client *c, robj *key, robj *reply);
 void objectSetLRUOrLFU(robj *val, long long lfu_freq, long long lru_idle,
                        long long lru_clock);

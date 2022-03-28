@@ -1246,6 +1246,13 @@ robj *objectCommandLookup(client *c, robj *key) {
     return (robj*) dictGetVal(de);
 }
 
+/**
+ * 处理object命令，可在不修改LRU和其他参数的情况下查找对象，并带有回复功能
+ * @param c
+ * @param key
+ * @param reply
+ * @return
+ */
 robj *objectCommandLookupOrReply(client *c, robj *key, robj *reply) {
     robj *o = objectCommandLookup(c,key);
 
