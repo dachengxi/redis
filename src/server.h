@@ -1146,8 +1146,18 @@ typedef struct client {
     char buf[PROTO_REPLY_CHUNK_BYTES];
 } client;
 
+/**
+ * 用来保存配置里面的save配置，是RDB自动保存的条件。比如：
+ * save 900 1 表示服务器在900秒内，对数据库至少进行了1次修改
+ */
 struct saveparam {
+    /**
+     * 秒数
+     */
     time_t seconds;
+    /**
+     * 修改次数
+     */
     int changes;
 };
 
@@ -1539,6 +1549,9 @@ struct redisServer {
     int aof_rewrite_scheduled;      /* Rewrite once BGSAVE terminates. */
     pid_t aof_child_pid;            /* PID if rewriting process */
     list *aof_rewrite_buf_blocks;   /* Hold changes during an AOF rewrite. */
+    /**
+     * AOF缓冲区，如果AOF功能开启，服务器在执行完一个写命令之后，会将命令追加记录到aof_buf缓冲区中
+     */
     sds aof_buf;      /* AOF buffer, written before entering the event loop */
     int aof_fd;       /* File descriptor of currently selected AOF file */
     int aof_selected_db; /* Currently selected DB in AOF */
@@ -1566,17 +1579,27 @@ struct redisServer {
     sds aof_child_diff;             /* AOF diff accumulator child side. */
     /* RDB persistence */
     /**
-     * 服务器每次修改一个键后，会将dirty计数器加1，
-     * 这个计数器会触发服务器的持久化以及复制操作
+     * dirty记录距离上一次成功执行SAVE或者BGSAVE命令后，服务器对数据库进行了多少次修改，
+     * 服务器每次修改一个键后，会将dirty计数器加1，这个计数器会触发服务器的持久化以及复制操作
      */
     long long dirty;                /* Changes to DB from the last save */
     long long dirty_before_bgsave;  /* Used to restore dirty on failed BGSAVE */
     pid_t rdb_child_pid;            /* PID of RDB saving child */
+    /**
+    * 用来保存配置里面的save配置，是RDB自动保存的条件。比如：
+    * save 900 1 表示服务器在900秒内，对数据库至少进行了1次修改
+    */
     struct saveparam *saveparams;   /* Save points array for RDB */
+    /**
+     * 表示有多少个自动save配置
+     */
     int saveparamslen;              /* Number of saving points */
     char *rdb_filename;             /* Name of RDB file */
     int rdb_compression;            /* Use compression in RDB? */
     int rdb_checksum;               /* Use RDB checksum? */
+    /**
+     * 记录服务器上一次成功执行SAVE或者BGSAVE命令的时间
+     */
     time_t lastsave;                /* Unix time of last successful save */
     time_t lastbgsave_try;          /* Unix time of last attempted bgsave */
     time_t rdb_save_time_last;      /* Time used by last RDB save run. */

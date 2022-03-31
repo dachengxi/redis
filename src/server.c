@@ -1303,6 +1303,9 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
     } else {
         /* If there is not a background saving/rewrite in progress check if
          * we have to save/rewrite now. */
+        /**
+         * 遍历自动save配置，检查是否执行BGSAVE操作
+         */
         for (j = 0; j < server.saveparamslen; j++) {
             struct saveparam *sp = server.saveparams+j;
 
@@ -1310,6 +1313,12 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
              * the given amount of seconds, and if the latest bgsave was
              * successful or if, in case of an error, at least
              * CONFIG_BGSAVE_RETRY_DELAY seconds already elapsed. */
+            /**
+             * dirty记录距离上一次成功执行SAVE或者BGSAVE命令后，服务器对数据库进行了多少次修改，
+             * lastsave记录服务器上一次成功执行SAVE或者BGSAVE命令的时间，
+             * 如果dirty大于等于save配置的修改次数并且lastsave上次成功保存后到现在超过了自动配置的秒数，
+             * 则执行BGSAVE操作。
+             */
             if (server.dirty >= sp->changes &&
                 server.unixtime-server.lastsave > sp->seconds &&
                 (server.unixtime-server.lastbgsave_try >
@@ -1320,6 +1329,7 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
                     sp->changes, (int)sp->seconds);
                 rdbSaveInfo rsi, *rsiptr;
                 rsiptr = rdbPopulateSaveInfo(&rsi);
+                // 执行BGSAVE操作
                 rdbSaveBackground(server.rdb_filename,rsiptr);
                 break;
             }

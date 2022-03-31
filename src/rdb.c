@@ -1262,6 +1262,12 @@ werr: /* Write error. */
 }
 
 /* Save the DB on disk. Return C_ERR on error, C_OK on success. */
+/**
+ * 保存RDB文件到磁盘
+ * @param filename
+ * @param rsi
+ * @return
+ */
 int rdbSave(char *filename, rdbSaveInfo *rsi) {
     char tmpfile[256];
     char cwd[MAXPATHLEN]; /* Current working dir path for error messages. */
@@ -1325,6 +1331,12 @@ werr:
     return C_ERR;
 }
 
+/**
+ * 保存RDB文件到磁盘
+ * @param filename
+ * @param rsi
+ * @return
+ */
 int rdbSaveBackground(char *filename, rdbSaveInfo *rsi) {
     pid_t childpid;
     long long start;
@@ -2134,6 +2146,12 @@ eoferr: /* unexpected end of file is handled here with a fatal exit */
  *
  * If you pass an 'rsi' structure initialied with RDB_SAVE_OPTION_INIT, the
  * loading code will fiil the information fields in the structure. */
+/**
+ * 从磁盘加载RDB文件
+ * @param filename
+ * @param rsi
+ * @return
+ */
 int rdbLoad(char *filename, rdbSaveInfo *rsi) {
     FILE *fp;
     rio rdb;
