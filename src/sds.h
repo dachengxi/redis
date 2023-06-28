@@ -40,13 +40,23 @@ extern const char *SDS_NOINIT;
 #include <stdarg.h>
 #include <stdint.h>
 
-/*
+/**
+ * sds全称Simple Dynamic Strings
+ *
  * redis自定义的简单动态字符串，除了用来保存字符串值，还可以用作缓冲区：
  * AOF模块中的AOF缓冲区以及客户端状态中的输入缓冲区。
  */
 typedef char *sds;
 
-/*
+/**
+ * sdshdr全称Simple Dynamic Strings Header
+ *
+ * sdshdr5使用5位来存储长度，unsigned char类型的高5位
+ * sdshdr8使用8位来存储长度，unsigned char类型字段存储长度
+ * sdshdr16使用16位来存储长度，unsigned short类型字段存储长度
+ * sdshdr32使用32位来存储长度，unsigned int类型字段存储长度
+ * sdshdr64使用64位来存储长度，unsigned long long类型字段存储长度
+ *
  * sdshdr5用来存储长度小于32的短字符串
  * flags占1个字节：
  *      - 低3位表示存储类型，
@@ -110,7 +120,7 @@ struct __attribute__ ((__packed__)) sdshdr64 {
 #define SDS_TYPE_BITS 3
 // 得到执行sdshdr的起始地址的指针
 #define SDS_HDR_VAR(T,s) struct sdshdr##T *sh = (void*)((s)-(sizeof(struct sdshdr##T)));
-// 得到sdshdr的起始地址
+// 得到sdshdr的起始地址的指针
 #define SDS_HDR(T,s) ((struct sdshdr##T *)((s)-(sizeof(struct sdshdr##T))))
 #define SDS_TYPE_5_LEN(f) ((f)>>SDS_TYPE_BITS)
 
@@ -120,8 +130,11 @@ struct __attribute__ ((__packed__)) sdshdr64 {
  * @return
  */
 static inline size_t sdslen(const sds s) {
+    // 内存按照实际占用字节数对齐之后，char buf[]的前一个字节是unsigned char flags标志位
     unsigned char flags = s[-1];
+    // flags的低三位存储的是类型，和7（二进制为00000111）做与操作，得到sdshdr的类型
     switch(flags&SDS_TYPE_MASK) {
+        // sdshdr5类型的sds的长度存储在flags的高5位，其余几种类型的sds长度都存储在len字段中
         case SDS_TYPE_5:
             return SDS_TYPE_5_LEN(flags);
         case SDS_TYPE_8:
