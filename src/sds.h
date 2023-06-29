@@ -155,7 +155,9 @@ static inline size_t sdslen(const sds s) {
  * @return
  */
 static inline size_t sdsavail(const sds s) {
+    // 内存按照实际占用字节数对齐之后，char buf[]的前一个字节是unsigned char flags标志位
     unsigned char flags = s[-1];
+    // flags的低三位存储的是类型，和7（二进制为00000111）做与操作，得到sdshdr的类型
     switch(flags&SDS_TYPE_MASK) {
         case SDS_TYPE_5: {
             return 0;
@@ -186,7 +188,9 @@ static inline size_t sdsavail(const sds s) {
  * @param newlen
  */
 static inline void sdssetlen(sds s, size_t newlen) {
+    // 内存按照实际占用字节数对齐之后，char buf[]的前一个字节是unsigned char flags标志位
     unsigned char flags = s[-1];
+    // flags的低三位存储的是类型，和7（二进制为00000111）做与操作，得到sdshdr的类型
     switch(flags&SDS_TYPE_MASK) {
         case SDS_TYPE_5:
             {
