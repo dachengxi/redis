@@ -187,8 +187,14 @@ static int spt_copyargs(int argc, char *argv[]) {
  *
  * As this range will overwrite some or all of the argv and environ
  * strings, a deep copy of these two arrays is performed.
+ *
+ * 自定义进程名字
  */
 void spt_init(int argc, char *argv[]) {
+	/**
+	 * mac os和*nix系统创建进程后会给进程分配一个全局的环境变量char **environ，是一个char*数组，
+	 * 里面保存的是类似[k=v, k=v]这样的字符串数组
+	 */
         char **envp = environ;
 	char *base, *end, *nul, *tmp;
 	int i, error, envc;

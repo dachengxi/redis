@@ -4409,7 +4409,9 @@ int main(int argc, char **argv) {
 #endif
 
     /* We need to initialize our libraries, and the server configuration. */
+    // 如果编译时定义了INIT_SETPROCTITLE_REPLACEMENT宏，则使用spt_init函数来自定义进程名字
 #ifdef INIT_SETPROCTITLE_REPLACEMENT
+    // 自定义进程名字
     spt_init(argc, argv);
 #endif
     setlocale(LC_COLLATE,"");
