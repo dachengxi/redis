@@ -194,16 +194,21 @@ void spt_init(int argc, char *argv[]) {
 	/**
 	 * mac os和*nix系统创建进程后会给进程分配一个全局的环境变量char **environ，是一个char*数组，
 	 * 里面保存的是类似[k=v, k=v]这样的字符串数组
+	 *
+	 * *argv[]和**environ是一段连续内存，argv[0]中保存的是进程名
 	 */
-        char **envp = environ;
+	char **envp = environ;
 	char *base, *end, *nul, *tmp;
 	int i, error, envc;
 
+	// base指向argv[0]的起始地址
 	if (!(base = argv[0]))
 		return;
 
 	/* We start with end pointing at the end of argv[0] */
+	// nul指向argv[0]的结束地址，不包括\0
 	nul = &base[strlen(base)];
+	// end指向argv[0]的结束地址，包含\0
 	end = nul + 1;
 
 	/* Attempt to extend end as far as we can, while making sure
@@ -211,6 +216,7 @@ void spt_init(int argc, char *argv[]) {
 	 * argv, or anything that immediately follows argv (presumably
 	 * envp).
 	 */
+	// 遍历argv
 	for (i = 0; i < argc || (i >= argc && argv[i]); i++) {
 		if (!argv[i] || argv[i] < end)
 			continue;
@@ -222,6 +228,7 @@ void spt_init(int argc, char *argv[]) {
 	/* In case the envp array was not an immediate extension to argv,
 	 * scan it explicitly.
 	 */
+	// 遍历environ
 	for (i = 0; envp[i]; i++) {
 		if (envp[i] < end)
 			continue;
@@ -229,12 +236,14 @@ void spt_init(int argc, char *argv[]) {
 		if (end >= envp[i] && end <= envp[i] + strlen(envp[i]))
 			end = envp[i] + strlen(envp[i]) + 1;
 	}
+	// environ的数量
 	envc = i;
 
 	/* We're going to deep copy argv[], but argv[0] will still point to
 	 * the old memory for the purpose of updating the title so we need
 	 * to keep the original value elsewhere.
 	 */
+	// 将argv[0]的值复制到全局的结构体SPT中，也就是将原来的进程名备份
 	if (!(SPT.arg0 = strdup(argv[0])))
 		goto syerr;
 
@@ -256,9 +265,11 @@ void spt_init(int argc, char *argv[]) {
 #endif
 
     /* Now make a full deep copy of the environment and argv[] */
+	// 将environ原来的内存区域的内容拷贝到一个新的内存区域，原来的environ内存区域都留给了base所有
 	if ((error = spt_copyenv(envc, envp)))
 		goto error;
 
+	// 将argv[]中除了argv[0]的内存区域的内容拷贝到一个新的内存区域，原来的所有argv[]的内存区域都留给了base所有
 	if ((error = spt_copyargs(argc, argv)))
 		goto error;
 
