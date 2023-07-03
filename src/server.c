@@ -4414,8 +4414,11 @@ int main(int argc, char **argv) {
     // 自定义进程名字
     spt_init(argc, argv);
 #endif
+    // 设置本地化信息，使用的是C标准库的setlocale函数
     setlocale(LC_COLLATE,"");
+    // 初始化时区信息，使用C标准库的tzset函数
     tzset(); /* Populates 'timezone' global. */
+    // 设置内存分配失败时的回调函数
     zmalloc_set_oom_handler(redisOutOfMemoryHandler);
     srand(time(NULL)^getpid());
     gettimeofday(&tv,NULL);
