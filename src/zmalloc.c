@@ -96,12 +96,27 @@ static void zmalloc_default_oom(size_t size) {
     abort();
 }
 
+/**
+ * zmalloc_oom_handler用于处理内存不足的情况，执行一些错误处理操作，例如打印错误消息，释放一些已分配的内存等，可以确保redis不会在内存不足的
+ * 情况下崩溃，而是能够优雅的处理问题
+ */
 static void (*zmalloc_oom_handler)(size_t) = zmalloc_default_oom;
 
+/**
+ * zmalloc和C标准的malloc相似，但是有一些如下的区别：
+ * 1. zmalloc会对分配的内存进行额外的跟踪和处理，例如记录分配的内存大小和地址，内存对齐等
+ * 2. zmalloc在分配内存时会检查是否有足够的内存可用，如果没有足够的内存，会调用redis的错误处理函数，而不是返回NULL
+ * 3. zmalloc会维护一个内存池，提高分配和释放内存的效率
+ * 4. zmalloc提供了一些其他的功能，例如重置内存池，获取内存池的统计信息等
+ * @param size
+ * @return
+ */
 void *zmalloc(size_t size) {
     ASSERT_NO_SIZE_OVERFLOW(size);
+    // 分配内存
     void *ptr = malloc(size+PREFIX_SIZE);
 
+    // 分配失败，调用zmalloc_oom_handler函数来处理内存不足的情况
     if (!ptr) zmalloc_oom_handler(size);
 #ifdef HAVE_MALLOC_SIZE
     update_zmalloc_stat_alloc(zmalloc_size(ptr));

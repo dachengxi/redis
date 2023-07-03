@@ -4207,7 +4207,9 @@ void memtest(size_t megabytes, int passes);
 int checkForSentinelMode(int argc, char **argv) {
     int j;
 
+    // argv[0]中存储的是进程名字，在进程名字中查找是否有redis-sentinel，如果有就返回1
     if (strstr(argv[0],"redis-sentinel") != NULL) return 1;
+    // 在命令行参数中进行遍历，看是否有--sentinel参数，如果有就返回1
     for (j = 1; j < argc; j++)
         if (!strcmp(argv[j],"--sentinel")) return 1;
     return 0;
@@ -4421,12 +4423,17 @@ int main(int argc, char **argv) {
     // 设置内存分配失败时的回调函数
     zmalloc_set_oom_handler(redisOutOfMemoryHandler);
     srand(time(NULL)^getpid());
+    // 获取当前时间，存储到结构体tv中
     gettimeofday(&tv,NULL);
 
+    // 哈希种子
     char hashseed[16];
     getRandomHexChars(hashseed,sizeof(hashseed));
     dictSetHashFunctionSeed((uint8_t*)hashseed);
+
+    // 检查哨兵模式
     server.sentinel_mode = checkForSentinelMode(argc,argv);
+
     /**
      * 初始化服务器配置，给配置参数赋初始值
      */
