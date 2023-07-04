@@ -170,7 +170,7 @@ void queueLoadModule(sds path, sds *argv, int argc) {
 }
 
 /**
- * 解析配置
+ * 解析配置，并设置到redis服务器的配置中
  * @param config
  */
 void loadServerConfigFromString(char *config) {
@@ -178,7 +178,7 @@ void loadServerConfigFromString(char *config) {
     // totlines记录配置总行数
     int linenum = 0, totlines, i;
     int slaveof_linenum = 0;
-    // 存储分割后的配置
+    // 存储按行分割后的配置
     sds *lines;
 
     // 将字符串以\n为分隔符分割为多行
@@ -850,33 +850,40 @@ loaderr:
  * @param options 命令行输入的配置参数
  */
 void loadServerConfig(char *filename, char *options) {
+    // 创建一个空字符串，保存配置
     sds config = sdsempty();
     char buf[CONFIG_MAX_LINE+1];
 
     /* Load the file content */
+    // 从配置文件中加载配置
     if (filename) {
         FILE *fp;
 
+        // 只有一个-，从标准输入加载配置
         if (filename[0] == '-' && filename[1] == '\0') {
             fp = stdin;
         } else {
+            //打开取配置文件
             if ((fp = fopen(filename,"r")) == NULL) {
                 serverLog(LL_WARNING,
                     "Fatal error, can't open config file '%s'", filename);
                 exit(1);
             }
         }
+        // 从配置文件中读取配置
         while(fgets(buf,CONFIG_MAX_LINE+1,fp) != NULL)
             config = sdscat(config,buf);
         if (fp != stdin) fclose(fp);
     }
     /* Append the additional options */
+    // 命令行参数中指定的选项
     if (options) {
         config = sdscat(config,"\n");
+        // 将选项追加到config的后面
         config = sdscat(config,options);
     }
     /**
-     * 解析配置
+     * 解析配置，并设置到redis服务器的配置中
      */
     loadServerConfigFromString(config);
     sdsfree(config);

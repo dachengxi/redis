@@ -4372,8 +4372,8 @@ int redisIsSupervised(int mode) {
 
 /**
  * redis的入口
- * @param argc
- * @param argv
+ * @param argc 命令行参数数量
+ * @param argv 命令行参数
  * @return
  *
  * Redis处理流程：
@@ -4438,6 +4438,7 @@ int main(int argc, char **argv) {
      * 初始化服务器配置，给配置参数赋初始值
      */
     initServerConfig();
+    // 初始化模块系统，redis 5.0的模块系统允许开发者通过动态加载模块来扩展redis的功能
     moduleInitModulesSystem();
 
     /* Store the executable path and arguments in a safe place in order
@@ -4463,16 +4464,30 @@ int main(int argc, char **argv) {
     else if (strstr(argv[0],"redis-check-aof") != NULL)
         redis_check_aof_main(argc,argv);
 
+    // 命令行参数有两个或者更多的时候，才进行解析，argv[0]中是进程的名字
     if (argc >= 2) {
         j = 1; /* First option to parse in argv[] */
+        // 创建一个空字符串，用来存储命令行参数选项
         sds options = sdsempty();
+        // 配置文件路径
         char *configfile = NULL;
 
         /* Handle special options --help and --version */
+        /**
+         * redis-server命令行用法：
+         * - ./redis-server [/path/to/redis.conf] [options]
+         * - ./redis-server - (read config from stdin)
+         * - ./redis-server -v or --version
+         * - ./redis-server -h or --help
+         * - ./redis-server --test-memory <megabytes>
+         */
+        // -v或者--version选项：打印版本号
         if (strcmp(argv[1], "-v") == 0 ||
             strcmp(argv[1], "--version") == 0) version();
+        // -h或者--help选项：打印帮助
         if (strcmp(argv[1], "--help") == 0 ||
             strcmp(argv[1], "-h") == 0) usage();
+        // --test-memory选项：内存测试
         if (strcmp(argv[1], "--test-memory") == 0) {
             if (argc == 3) {
                 memtest(atoi(argv[2]),50);
@@ -4485,8 +4500,11 @@ int main(int argc, char **argv) {
         }
 
         /* First argument is the config file name? */
+        // 如果第一个命令行参数不是-或者--，则该参数是配置文件的路径
         if (argv[j][0] != '-' || argv[j][1] != '-') {
+            // 配置文件路径
             configfile = argv[j];
+            // 配置文件绝对路径
             server.configfile = getAbsolutePath(configfile);
             /* Replace the config file in server.exec_argv with
              * its absolute path. */
