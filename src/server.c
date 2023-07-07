@@ -2123,8 +2123,11 @@ void resetServerStats(void) {
 void initServer(void) {
     int j;
 
+    // 忽略SIGHUP信号
     signal(SIGHUP, SIG_IGN);
+    // 忽略对于管道/套接字等读取端已经关闭的写入操作而产生的SIGPIPE信号
     signal(SIGPIPE, SIG_IGN);
+    // 设置redis进程的信号处理程序
     setupSignalHandlers();
 
     if (server.syslog_enabled) {
@@ -4443,7 +4446,10 @@ int main(int argc, char **argv) {
 
     /* Store the executable path and arguments in a safe place in order
      * to be able to restart the server later. */
+    // 保存redis服务器启动时的可执行文件路径和命令行参数，在重启服务时使用
+    // 获取可执行文件的绝对路径
     server.executable = getAbsolutePath(argv[0]);
+    // 使用zmolloc分配内存，用来存放命令行参数
     server.exec_argv = zmalloc(sizeof(char*)*(argc+1));
     server.exec_argv[argc] = NULL;
     for (j = 0; j < argc; j++) server.exec_argv[j] = zstrdup(argv[j]);
@@ -4451,14 +4457,18 @@ int main(int argc, char **argv) {
     /* We need to init sentinel right now as parsing the configuration file
      * in sentinel mode will have the effect of populating the sentinel
      * data structures with master nodes to monitor. */
+    // 哨兵模式启动
     if (server.sentinel_mode) {
+        // 初始化哨兵相关的配置
         initSentinelConfig();
+        // 初始化哨兵相关的数据结构和网络连接等
         initSentinel();
     }
 
     /* Check if we need to start in redis-check-rdb/aof mode. We just execute
      * the program main. However the program is part of the Redis executable
      * so that we can easily execute an RDB check on loading errors. */
+    // 如果可执行文件名包含redis-check-rdb或者redis-check-aof，则检查rdb和aof文件的正确性和完整性
     if (strstr(argv[0],"redis-check-rdb") != NULL)
         redis_check_rdb_main(argc,argv,NULL);
     else if (strstr(argv[0],"redis-check-aof") != NULL)
@@ -4565,7 +4575,9 @@ int main(int argc, char **argv) {
         serverLog(LL_WARNING, "Configuration loaded");
     }
 
+    // redis是否以监控模式运行，监控模式是指在启动redis时将其交给一个监控进程（systemd）来管理，由监控进程负责自动重启redis服务
     server.supervised = redisIsSupervised(server.supervised_mode);
+    // redis是否需要在后台运行，1为在后台运行，0为不在后台运行
     int background = server.daemonize && !server.supervised;
     if (background) daemonize();
 
@@ -4573,15 +4585,21 @@ int main(int argc, char **argv) {
      * 根据配置参数，初始化服务器。创建监听套接字。
      */
     initServer();
+    // 创建pid文件
     if (background || server.pidfile) createPidFile();
+    // 修改进程名称
     redisSetProcTitle(argv[0]);
+    // ASCII艺术字符画
     redisAsciiArt();
+    // 检查backlog设置，TCP套接字的backlog指定允许挂起的未完成连接的最大数量，redis会检查backlog设置是否过低，如果过低则会打印一条警告日志
     checkTcpBacklogSettings();
 
     if (!server.sentinel_mode) {
         /* Things not needed when running in Sentinel mode. */
         serverLog(LL_WARNING,"Server initialized");
+    // 对linux系统下的特定问题进行检查和预警
     #ifdef __linux__
+        // 在内存使用达到某个阈值时发出警告
         linuxMemoryWarnings();
     #if defined (__arm64__)
         int ret;
@@ -4600,8 +4618,11 @@ int main(int argc, char **argv) {
         }
     #endif /* __arm64__ */
     #endif /* __linux__ */
+        // 加载redis模块
         moduleLoadFromQueue();
+        // redis初始化
         InitServerLast();
+        // 从磁盘恢复文件
         loadDataFromDisk();
         if (server.cluster_enabled) {
             if (verifyClusterConfigWithData() == C_ERR) {
@@ -4621,6 +4642,7 @@ int main(int argc, char **argv) {
     }
 
     /* Warning the user about suspicious maxmemory setting. */
+    // 检查服务器是否设置了最大内存限制
     if (server.maxmemory > 0 && server.maxmemory < 1024*1024) {
         serverLog(LL_WARNING,"WARNING: You specified a maxmemory value that is less than 1MB (current value is %llu bytes). Are you sure this is what you really want?", server.maxmemory);
     }
@@ -4631,6 +4653,7 @@ int main(int argc, char **argv) {
      * 开启事件循环，在循环中调用IO复用函数进行监听，等待连接和命令请求
      */
     aeMain(server.el);
+    // 删除事件循环，释放事件循环所占用的内存
     aeDeleteEventLoop(server.el);
     return 0;
 }
