@@ -45,8 +45,13 @@ typedef struct listNode {
     void *value;
 } listNode;
 
+/**
+ * 迭代器
+ */
 typedef struct listIter {
+    // 指向具体的节点
     listNode *next;
+    // 迭代的顺序
     int direction;
 } listIter;
 
