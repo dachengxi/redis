@@ -132,7 +132,7 @@ static void _dictReset(dictht *ht)
 dict *dictCreate(dictType *type,
         void *privDataPtr)
 {
-    // 分配内存，96字节
+    // 声明字典结构体，并分配内存，96字节
     dict *d = zmalloc(sizeof(*d));
 
     // 初始化字典
@@ -156,7 +156,9 @@ int _dictInit(dict *d, dictType *type,
     _dictReset(&d->ht[0]);
     // 重置哈希表1
     _dictReset(&d->ht[1]);
+    // 设置类型特定函数
     d->type = type;
+    // 设置类型特定函数需要的数据
     d->privdata = privDataPtr;
     // rehashidx设置为-1
     d->rehashidx = -1;

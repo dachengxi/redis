@@ -150,6 +150,9 @@ typedef void (dictScanFunction)(void *privdata, const dictEntry *de);
 typedef void (dictScanBucketFunction)(void *privdata, dictEntry **bucketref);
 
 /* This is the initial size of every hash table */
+/**
+ * 每个哈希表初始化大小：4
+ */
 #define DICT_HT_INITIAL_SIZE     4
 
 /* ------------------------------- Macros ------------------------------------*/
@@ -190,7 +193,7 @@ typedef void (dictScanBucketFunction)(void *privdata, dictEntry **bucketref);
         (key1) == (key2))
 
 /**
- * 获取键的哈希值
+ * 宏定义：获取键的哈希值
  */
 #define dictHashKey(d, key) (d)->type->hashFunction(key)
 #define dictGetKey(he) ((he)->key)
@@ -207,12 +210,13 @@ typedef void (dictScanBucketFunction)(void *privdata, dictEntry **bucketref);
 
 /* API */
 /**
- * 创建字典
+ * 创建一个新的字典
  * @param type
  * @param privDataPtr
  * @return
  */
 dict *dictCreate(dictType *type, void *privDataPtr);
+
 /**
  * 字典扩容
  * @param d
@@ -220,6 +224,7 @@ dict *dictCreate(dictType *type, void *privDataPtr);
  * @return
  */
 int dictExpand(dict *d, unsigned long size);
+
 /**
  * 添加键值对
  * @param d
@@ -228,6 +233,7 @@ int dictExpand(dict *d, unsigned long size);
  * @return
  */
 int dictAdd(dict *d, void *key, void *val);
+
 /**
  * 添加键
  * @param d
@@ -236,8 +242,24 @@ int dictAdd(dict *d, void *key, void *val);
  * @return
  */
 dictEntry *dictAddRaw(dict *d, void *key, dictEntry **existing);
+
+/**
+ * 添加或查找
+ * @param d
+ * @param key
+ * @return
+ */
 dictEntry *dictAddOrFind(dict *d, void *key);
+
+/**
+ * 将给定的键值添加到字典里，如果键已经存在，则用新值代替旧值
+ * @param d
+ * @param key
+ * @param val
+ * @return
+ */
 int dictReplace(dict *d, void *key, void *val);
+
 /**
  * 删除元素
  * @param d
@@ -245,6 +267,7 @@ int dictReplace(dict *d, void *key, void *val);
  * @return
  */
 int dictDelete(dict *d, const void *key);
+
 dictEntry *dictUnlink(dict *ht, const void *key);
 void dictFreeUnlinkedEntry(dict *d, dictEntry *he);
 void dictRelease(dict *d);
