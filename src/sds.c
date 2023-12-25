@@ -39,6 +39,7 @@
 #include "sds.h"
 #include "sdsalloc.h"
 
+// 定义全局变量，并初始化
 const char *SDS_NOINIT = "SDS_NOINIT";
 
 static inline int sdsHdrSize(char type) {

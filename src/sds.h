@@ -30,10 +30,14 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+// 防止sds.h被重复引用
 #ifndef __SDS_H
 #define __SDS_H
 
+// 定义字符串的最大预分配长度：1M
 #define SDS_MAX_PREALLOC (1024*1024)
+
+// 声明全局变量
 extern const char *SDS_NOINIT;
 
 #include <sys/types.h>
@@ -46,6 +50,7 @@ extern const char *SDS_NOINIT;
  * redis自定义的简单动态字符串，除了用来保存字符串值，还可以用作缓冲区：
  * AOF模块中的AOF缓冲区以及客户端状态中的输入缓冲区。
  */
+ // sds是字符数组char*的别名
 typedef char *sds;
 
 /**
@@ -62,6 +67,7 @@ typedef char *sds;
  *      - 低3位表示存储类型，
  *      - 高5位表示存储长度，2^5 - 1
  */
+// packed用来指定变量或类型使用最可能小的地址对齐方式
 /* Note: sdshdr5 is never used, we just access the flags byte directly.
  * However is here to document the layout of type 5 SDS strings. */
 struct __attribute__ ((__packed__)) sdshdr5 {
@@ -70,6 +76,7 @@ struct __attribute__ ((__packed__)) sdshdr5 {
     // 实际存储字符串的字节数组
     char buf[];
 };
+// 是一个可变长结构体（动态结构体），结构体最后是一个未知大小的柔性数组
 struct __attribute__ ((__packed__)) sdshdr8 {
     // 字符串的实际长度，不包含最后的空字符，1个字节
     uint8_t len; /* used */
@@ -118,10 +125,15 @@ struct __attribute__ ((__packed__)) sdshdr64 {
 #define SDS_TYPE_64 4
 #define SDS_TYPE_MASK 7
 #define SDS_TYPE_BITS 3
-// 得到执行sdshdr的起始地址的指针
+// 得到指向sdshdr的起始地址的指针
+// 展开后变成：struct sdshdr64 *sh = (void*)((s) - (sizeof(struct sdshdr64)));
+// s是存放字符串的起始地址，(sizeof(struct sdshdr##T))是不包含buf（柔性数组）的大小
+// s - (sizeof(struct sdshdr##T))表示sdshdr结构体的起始地址
 #define SDS_HDR_VAR(T,s) struct sdshdr##T *sh = (void*)((s)-(sizeof(struct sdshdr##T)));
 // 得到sdshdr的起始地址的指针
+// 展开后变成：((struct sdshdr64 *) ((s) - (sizeof(struct sdshdr64))))
 #define SDS_HDR(T,s) ((struct sdshdr##T *)((s)-(sizeof(struct sdshdr##T))))
+// 展开后变成：((flags) >> 3)
 #define SDS_TYPE_5_LEN(f) ((f)>>SDS_TYPE_BITS)
 
 /**
