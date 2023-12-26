@@ -141,6 +141,12 @@ struct __attribute__ ((__packed__)) sdshdr64 {
  * @param s
  * @return
  */
+// 函数定义在头文件中，需要用static进行修饰，让函数仅在文件内部可见
+// inline建议编译器进行内联，有可能不会进行内联，所以多处引用该函数，并且都没有内联，则会出现重复定义的错误，
+// 加上static后限制了函数的作用范围，就可以避免出现重复定义错误
+// 参数使用const修饰，表示数据不能在函数内被修改
+// 返回值类型size_t，用来替代unsigned int或unsigned long，可以保证在同一平台中始终得到一个数据类型或变量的字节大小，
+// 保证程序对该数据类型或变量的统计方式始终一致
 static inline size_t sdslen(const sds s) {
     // 内存按照实际占用字节数对齐之后，char buf[]的前一个字节是unsigned char flags标志位
     unsigned char flags = s[-1];
@@ -150,6 +156,7 @@ static inline size_t sdslen(const sds s) {
         case SDS_TYPE_5:
             return SDS_TYPE_5_LEN(flags);
         case SDS_TYPE_8:
+            // 先得到sdshdr8结构体的起始地址的指针，再获取结构体len成员的值，len表示的是sds字符串的实际长度
             return SDS_HDR(8,s)->len;
         case SDS_TYPE_16:
             return SDS_HDR(16,s)->len;
@@ -325,7 +332,20 @@ void sdsfree(sds s);
  * @return
  */
 sds sdsgrowzero(sds s, size_t len);
+/**
+ * 连接字符串
+ * @param s 需要被连接的sds字符串
+ * @param t 需要连接的内容的起始地址
+ * @param len 需要连接的内容的长度
+ * @return
+ */
 sds sdscatlen(sds s, const void *t, size_t len);
+/**
+ * 连接字符串（由于没有指定长度，需要t的内容以NULL结尾）
+ * @param s 需要被连接的sds字符串
+ * @param t 需要连接的内容的起始地址
+ * @return
+ */
 sds sdscat(sds s, const char *t);
 /**
  * 拼接字符串
@@ -366,7 +386,17 @@ sds sdscatfmt(sds s, char const *fmt, ...);
  * @return
  */
 sds sdstrim(sds s, const char *cset);
+/**
+ * 截取字符串中从start到end的一段字符，并用来覆盖原来的字符串
+ * @param s 要截取的字符串
+ * @param start 开始位置
+ * @param end 结束位置
+ */
 void sdsrange(sds s, ssize_t start, ssize_t end);
+/**
+ * 更新字符串长度
+ * @param s
+ */
 void sdsupdatelen(sds s);
 /**
  * 不直接释放内存，重置len值
@@ -391,8 +421,21 @@ int sdscmp(const sds s1, const sds s2);
  */
 sds *sdssplitlen(const char *s, ssize_t len, const char *sep, int seplen, int *count);
 void sdsfreesplitres(sds *tokens, int count);
+/**
+ * 将sds中字符转换为小写形式
+ * @param s
+ */
 void sdstolower(sds s);
+/**
+ * 将sds中字符转换为大写形式
+ * @param s
+ */
 void sdstoupper(sds s);
+/**
+ * 通过long long类型的值构造一个sds
+ * @param value
+ * @return
+ */
 sds sdsfromlonglong(long long value);
 sds sdscatrepr(sds s, const char *p, size_t len);
 sds *sdssplitargs(const char *line, int *argc);
